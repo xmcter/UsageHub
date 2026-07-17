@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UsageHub · AI 订阅余额</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: #0f1115; color: #e6e6e6; padding: 16px; }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  #meta { color: #8a8f98; font-size: 12px; margin-bottom: 16px; }
+  #meta button { margin-left: 8px; background: #22262e; color: #e6e6e6; border: 1px solid #333;
+                 border-radius: 6px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  .card { background: #171a21; border: 1px solid #262b35; border-radius: 12px; padding: 14px; }
+  .card.err { border-color: #5c2b2b; }
+  .card h2 { font-size: 15px; margin-bottom: 2px; }
+  .sub { color: #8a8f98; font-size: 12px; margin-bottom: 10px; }
+  .win { margin: 8px 0; }
+  .win .lbl { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+  .win .lbl .rst { color: #8a8f98; font-size: 12px; }
+  .track { height: 8px; background: #262b35; border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; border-radius: 4px; background: #3fb26f; transition: width .3s; }
+  .fill.warn { background: #d9a441; }
+  .fill.crit { background: #d94141; }
+  .errmsg { color: #e08585; font-size: 12px; white-space: pre-wrap; margin-top: 6px; }
+  .warnmsg { color: #d9a441; font-size: 12px; white-space: pre-wrap; margin-top: 6px; }
+</style>
+</head>
+<body>
+<h1>UsageHub</h1>
+<div id="meta">加载中…</div>
+<div class="grid" id="grid"></div>
+<script>
+async function load(force) {
+  const meta = document.getElementById('meta');
+  try {
+    const r = await fetch('/api/usage' + (force ? '?force=1' : ''));
+    const d = await r.json();
+    render(d);
+  } catch (e) { meta.textContent = '加载失败: ' + e; }
+}
+function pctClass(p) { return p === null ? '' : p < 15 ? 'crit' : p < 35 ? 'warn' : ''; }
+function countdown(iso) {
+  if (!iso) return '';
+  const t = new Date(iso) - Date.now();
+  if (isNaN(t) || t <= 0) return '';
+  const h = Math.floor(t / 3600000), m = Math.floor(t % 3600000 / 60000);
+  return '重置 ' + (h ? h + 'h' : '') + String(m).padStart(2, '0') + 'm 后';
+}
+function render(d) {
+  document.getElementById('meta').innerHTML =
+    '抓取于 ' + new Date(d.generated_at).toLocaleTimeString() +
+    '（缓存 ' + d.cache_seconds + 's）<button onclick="load(true)">强制刷新</button>';
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  for (const r of d.results) {
+    const card = document.createElement('div');
+    card.className = 'card' + (r.ok ? '' : ' err');
+    let html = '<h2>' + (r.ok ? '' : '❌ ') + esc(r.display_name) + '</h2>';
+    html += '<div class="sub">' + (esc([r.plan, r.account].filter(Boolean).join(' · ')) || '&nbsp;') + '</div>';
+    for (const w of r.windows || []) {
+      const p = w.remaining_pct;
+      let right = [];
+      if (p !== null && p !== undefined) right.push(p.toFixed(1) + '%');
+      if (w.remaining_abs !== null && w.remaining_abs !== undefined)
+        right.push(fmtAbs(w.remaining_abs, w.limit_abs, w.unit));
+      html += '<div class="win"><div class="lbl"><span>' + esc(w.label) + '</span>' +
+        '<span>' + right.join(' · ') + ' <span class="rst">' + countdown(w.resets_at) + '</span></span></div>';
+      if (p !== null && p !== undefined)
+        html += '<div class="track"><div class="fill ' + pctClass(p) + '" style="width:' + Math.max(0, Math.min(100, p)) + '%"></div></div>';
+      html += '</div>';
+    }
+    if (!r.ok) html += '<div class="errmsg">' + esc(r.error) + '</div>';
+    else if (r.error) html += '<div class="warnmsg">⚠ ' + esc(r.error) + '</div>';
+    card.innerHTML = html;
+    grid.appendChild(card);
+  }
+}
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function fmtAbs(rem, limit, unit) {
+  const range = rem + (limit ? ' / ' + limit : '');
+  if (unit === '$') return '$' + range;      // 货币前缀
+  return range + (unit ? ' ' + unit : '');   // 其他单位后缀
+}
+load(false);
+setInterval(() => load(false), 60000);
+</script>
+</body>
+</html>
