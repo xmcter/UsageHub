@@ -6,23 +6,32 @@
 
 | 服务 | 数据源 | 凭据 |
 |---|---|---|
-| Claude 订阅（Pro/Max） | 官方 OAuth usage 接口（5 小时窗 + 周窗） | Claude Code OAuth token（自动从钥匙串/`~/.claude/.credentials.json` 找，或 `claude setup-token` 生成后填配置） |
+| Claude 订阅（Pro/Max） | 官方 OAuth usage 接口，或 `claude.ai/api/organizations/<org>/usage`（5 小时窗 + 周窗） | Claude Code OAuth token（钥匙串/`~/.claude/.credentials.json`/`claude setup-token`），找不到则自动解密 Chrome 的 claude.ai sessionKey |
 | ClinePass / Cline | `api.cline.bot` 官方 credits 余额 | 自动从 cc-switch 数据库只读提取，或填配置 |
-| Antigravity | 本机 language server Connect RPC（按模型 5 小时窗） | 无需配置，进程自动发现（需 Antigravity 在运行） |
-| SuperGrok（grok.com） | 网页内部接口 `rest/rate-limits` | 需手动粘贴浏览器 Cookie（未公开接口，会过期） |
+| Antigravity | 本机 language server + 云端 `retrieveUserQuota`（多账号） | 本地进程自动发现；CodexBar / 钥匙串 / `config.accounts` |
+| SuperGrok（grok.com） | 网页内部 gRPC-Web 周限额 | 需手动粘贴浏览器 Cookie（未公开接口，会过期） |
 
 ## 安装与使用
 
+> ⚠️ macOS 系统自带 python3 (3.9) 用的是 LibreSSL 2.8.3，经代理连部分 HTTPS 站点会
+> `SSLEOFError`。必须用带 OpenSSL 的 Python（3.11+，uv 安装的即可）建 venv 运行。
+
 ```bash
-pip3 install -r requirements.txt   # 仅依赖 requests
+uv venv --python 3.11 .venv
+uv pip install --python .venv/bin/python -r requirements.txt
 
-python3 -m usagehub                # 终端表格
-python3 -m usagehub --json         # JSON 输出（可接脚本）
-python3 -m usagehub --providers claude,antigravity   # 只查部分
+.venv/bin/python -m usagehub                # 终端表格
+.venv/bin/python -m usagehub --json         # JSON 输出（可接脚本）
+.venv/bin/python -m usagehub --providers claude,antigravity   # 只查部分
 
-python3 -m usagehub serve          # Web 面板 http://127.0.0.1:8787
-python3 -m usagehub serve --lan    # 绑 0.0.0.0，安卓手机访问 http://<本机IP>:8787
+.venv/bin/python -m usagehub serve          # Web 面板 http://127.0.0.1:8787
+.venv/bin/python -m usagehub serve --lan    # 绑 0.0.0.0，局域网/隧道反代用
+.venv/bin/python -m usagehub menu           # macOS 状态栏（可选）
+.venv/bin/python -m usagehub auth antigravity   # 浏览器加 Antigravity 账号（不依赖 CodexBar）
 ```
+
+**不装开机自启。** 需要看面板时再开 `serve`；公网见 `scripts/FREEDOMAIN.md`（临时 trycloudflare 或固定命名隧道，均为手动）。
+
 
 首次运行自动生成配置 `~/.usagehub/config.json`（权限 600，密钥/cookie 只存这里，永不进 git）：
 
