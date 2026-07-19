@@ -4,23 +4,69 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>UsageHub · AI Coding Quotas</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='1' x2='1' y2='0'%3E%3Cstop offset='0' stop-color='%233b82f6'/%3E%3Cstop offset='1' stop-color='%2310b981'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='24' height='24' rx='6' fill='%230b0c10'/%3E%3Cpath d='M4.5 16.5a7.5 7.5 0 0 1 15 0' fill='none' stroke='url(%23g)' stroke-width='2.2' stroke-linecap='round'/%3E%3Cline x1='12' y1='16.5' x2='16' y2='9.5' stroke='%23f3f4f6' stroke-width='1.8' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='16.5' r='1.6' fill='%23f3f4f6'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='1' x2='1' y2='0'%3E%3Cstop offset='0' stop-color='%23c8722c'/%3E%3Cstop offset='1' stop-color='%23e0a845'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='24' height='24' rx='6' fill='%230b0c10'/%3E%3Cpath d='M4.5 16.5a7.5 7.5 0 0 1 15 0' fill='none' stroke='url(%23g)' stroke-width='2.2' stroke-linecap='round'/%3E%3Cline x1='12' y1='16.5' x2='16' y2='9.5' stroke='%23f3f4f6' stroke-width='1.8' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='16.5' r='1.6' fill='%23f3f4f6'/%3E%3C/svg%3E">
 <style>
+  /* 配色与 forcine 导航站、AI 情报站统一（同一套 paper/ink/line/beacon 值）。
+     不再引 Google Fonts：国内加载慢、且三站统一用系统字体栈。 */
   :root {
-    color-scheme: dark;
-    --bg-main: #0b0c10;
-    --bg-popover: rgba(22, 26, 37, 0.72);
-    --border-color: rgba(255, 255, 255, 0.08);
-    --text-primary: #f3f4f6;
-    --text-secondary: #9ca3af;
-    --text-muted: #6b7280;
-    --primary-color: #3b82f6;
-    --success-color: #10b981;
-    --warning-color: #f59e0b;
-    --danger-color: #ef4444;
+    color-scheme: light dark;
+    --bg-main: #f4f5f2;
+    --bg-popover: rgba(255, 255, 255, 0.82);
+    --border-color: #dcdfd9;
+    --text-primary: #14181f;
+    --text-secondary: #565f6b;
+    --text-muted: #8b939c;
+    --primary-color: #c8722c;
+    --success-color: #3f8f6b;
+    --warning-color: #c8912c;
+    --danger-color: #ac3b3b;
+    /* 表面叠加层：浅色用深色半透明，暗色用白色半透明，两套都由此处切换 */
+    --surface: rgba(20,24,31,.025);
+    --surface-hover: rgba(20,24,31,.05);
+    --surface-border: rgba(20,24,31,.07);
+    --surface-border-hover: rgba(20,24,31,.12);
+    --hairline: rgba(20,24,31,.06);
+    --chip-bg: rgba(20,24,31,.05);
+    --chip-border: rgba(20,24,31,.07);
+    --control-bg: rgba(20,24,31,.04);
+    --control-border: rgba(20,24,31,.09);
+    --control-bg-hover: rgba(20,24,31,.08);
+    --control-border-hover: rgba(20,24,31,.15);
+    --meta-bg: rgba(20,24,31,.03);
+    --scroll-thumb: rgba(20,24,31,.15);
+    --popover-shadow: 0 1px 2px rgba(20,23,28,.06), 0 16px 40px rgba(20,23,28,.10);
+    --overlay-scrim: rgba(244,245,242,.86);
+    --overlay-panel: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-main: #0c0f14;
+      --bg-popover: rgba(18, 22, 29, 0.72);
+      --border-color: #262b33;
+      --text-primary: #e7ebe6;
+      --text-secondary: #9aa3ab;
+      --text-muted: #6b7480;
+      --primary-color: #e08a45;
+      --success-color: #5fbf94;
+      --warning-color: #e0b845;
+      --danger-color: #d97575;
+      --surface: rgba(255,255,255,.02);
+      --surface-hover: rgba(255,255,255,.04);
+      --surface-border: rgba(255,255,255,.04);
+      --surface-border-hover: rgba(255,255,255,.08);
+      --hairline: rgba(255,255,255,.03);
+      --chip-bg: rgba(255,255,255,.06);
+      --chip-border: rgba(255,255,255,.04);
+      --control-bg: rgba(255,255,255,.05);
+      --control-border: rgba(255,255,255,.08);
+      --control-bg-hover: rgba(255,255,255,.1);
+      --control-border-hover: rgba(255,255,255,.15);
+      --meta-bg: rgba(0,0,0,.15);
+      --scroll-thumb: rgba(255,255,255,.1);
+      --popover-shadow: 0 20px 40px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.04);
+      --overlay-scrim: rgba(11,12,16,.85);
+      --overlay-panel: #12161d;
+    }
   }
 
   * {
@@ -30,7 +76,8 @@
   }
 
   body {
-    font-family: 'Inter', -apple-system, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+                 "Microsoft YaHei", system-ui, sans-serif;
     background: var(--bg-main);
     color: var(--text-primary);
     min-height: 100vh;
@@ -39,8 +86,7 @@
     align-items: center;
     padding: 20px;
     background-image: 
-      radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.12) 0px, transparent 50%),
-      radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%);
+      radial-gradient(at 50% -10%, rgba(200, 114, 44, 0.10) 0px, transparent 60%);
     background-attachment: fixed;
   }
 
@@ -53,7 +99,7 @@
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--border-color);
     border-radius: 20px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    box-shadow: var(--popover-shadow);
     overflow: hidden;
     animation: popoverFade 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     transition: max-width 0.3s ease;
@@ -97,13 +143,12 @@
   }
 
   .logo-title h1 {
-    font-family: 'Outfit', sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+                 "Microsoft YaHei", system-ui, sans-serif;
     font-size: 18px;
     font-weight: 700;
     letter-spacing: -0.5px;
-    background: linear-gradient(135deg, #fff 30%, #a5b4fc 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--text-primary);
   }
 
   .logo-icon {
@@ -111,8 +156,8 @@
   }
 
   .refresh-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--control-bg);
+    border: 1px solid var(--control-border);
     color: var(--text-primary);
     border-radius: 8px;
     width: 32px;
@@ -125,8 +170,8 @@
   }
 
   .refresh-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.15);
+    background: var(--control-bg-hover);
+    border-color: var(--control-border-hover);
   }
 
   .refresh-btn svg {
@@ -142,7 +187,7 @@
   /* Status Bar Info */
   .meta-bar {
     padding: 8px 20px;
-    background: rgba(0, 0, 0, 0.15);
+    background: var(--meta-bg);
     border-bottom: 1px solid var(--border-color);
     font-size: 11px;
     color: var(--text-muted);
@@ -168,7 +213,7 @@
     background: transparent;
   }
   .providers-list::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--scroll-thumb);
     border-radius: 3px;
   }
 
@@ -185,16 +230,16 @@
 
   /* Provider Card */
   .card {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.04);
+    background: var(--surface);
+    border: 1px solid var(--surface-border);
     border-radius: 12px;
     padding: 12px 14px;
     transition: all 0.2s ease;
   }
 
   .card:hover {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.08);
+    background: var(--surface-hover);
+    border-color: var(--surface-border-hover);
   }
 
   .card.err {
@@ -241,7 +286,7 @@
   .win:not(:first-child) {
     margin-top: 12px;
     padding-top: 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.03);
+    border-top: 1px solid var(--hairline);
   }
 
   .win-label-row {
@@ -265,8 +310,8 @@
   }
 
   .badge-reset {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.04);
+    background: var(--chip-bg);
+    border: 1px solid var(--chip-border);
     color: var(--text-muted);
     font-size: 10px;
     padding: 1px 6px;
@@ -277,7 +322,7 @@
   /* Progress Bar */
   .track {
     height: 5px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--chip-bg);
     border-radius: 2.5px;
     overflow: hidden;
   }
@@ -285,16 +330,16 @@
   .fill {
     height: 100%;
     border-radius: 2.5px;
-    background: linear-gradient(90deg, #10b981, #34d399);
+    background: var(--success-color);
     transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .fill.warn {
-    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+    background: var(--warning-color);
   }
 
   .fill.crit {
-    background: linear-gradient(90deg, #ef4444, #f87171);
+    background: var(--danger-color);
   }
 
   /* Subscription pill badge */
@@ -320,7 +365,7 @@
   }
 
   .warnmsg {
-    color: #fbbf24;
+    color: var(--warning-color);
     font-size: 11px;
     margin-top: 6px;
     background: rgba(245, 158, 11, 0.06);
@@ -334,7 +379,7 @@
   .login-overlay {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(11, 12, 16, 0.85);
+    background: var(--overlay-scrim);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     display: flex;
@@ -349,7 +394,7 @@
   }
 
   .login-modal {
-    background: rgba(22, 26, 37, 0.95);
+    background: var(--overlay-panel);
     border: 1px solid var(--border-color);
     border-radius: 18px;
     padding: 24px;
@@ -360,7 +405,9 @@
   }
 
   .login-modal h2 {
-    font-family: 'Outfit', sans-serif;
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+                 "Microsoft YaHei", system-ui, sans-serif;
     font-size: 18px;
     margin-bottom: 8px;
   }
@@ -373,7 +420,7 @@
 
   .input-group input {
     width: 100%;
-    background: rgba(0,0,0,0.2);
+    background: var(--control-bg);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
     padding: 10px 12px;
@@ -418,7 +465,7 @@
   }
 
   .login-btn:hover {
-    background: #2563eb;
+    background: var(--primary-color);
   }
 
   .login-error-msg {
@@ -445,13 +492,13 @@
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="uh-logo" x1="0" y1="1" x2="1" y2="0">
-              <stop offset="0" stop-color="#3b82f6"/>
-              <stop offset="1" stop-color="#10b981"/>
+              <stop offset="0" stop-color="#c8722c"/>
+              <stop offset="1" stop-color="#e0a845"/>
             </linearGradient>
           </defs>
           <path d="M4.5 16.5a7.5 7.5 0 0 1 15 0" fill="none" stroke="url(#uh-logo)" stroke-width="2.2" stroke-linecap="round"/>
-          <line x1="12" y1="16.5" x2="16" y2="9.5" stroke="#f3f4f6" stroke-width="1.8" stroke-linecap="round"/>
-          <circle cx="12" cy="16.5" r="1.7" fill="#f3f4f6"/>
+          <line x1="12" y1="16.5" x2="16" y2="9.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <circle cx="12" cy="16.5" r="1.7" fill="currentColor"/>
         </svg>
       </span>
       <h1>UsageHub</h1>
