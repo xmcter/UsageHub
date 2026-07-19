@@ -3,18 +3,13 @@ import json
 import os
 import sys
 import subprocess
+import time
 import requests
 import webbrowser
 import rumps
 from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".usagehub" / "config.json"
-AUTO_CONFIG_SCRIPT = Path(__file__).parent.parent / "Agent-Mine" / "core" / "rules"
-# We'll locate the auto_configure_grok.py script in the brain artifacts directory
-SCRATCH_DIR = Path.home() / ".gemini" / "antigravity" / "brain"
-# Find any conversational folder that has scratch/auto_configure_grok.py
-# Or we can just read the active session script we created:
-AUTO_CONFIGURE_PATH = Path("/Users/a123/.gemini/antigravity/brain/78d4b91e-8550-4f69-82d4-72596662d25c/scratch/auto_configure_grok.py")
 
 def make_bar(pct, width=10):
     if pct is None:
@@ -29,17 +24,50 @@ class UsageHubApp(rumps.App):
         self.port = 8787
         self.username = "admin"
         self.password = ""
+        self.serve_proc = None          # 由本 App 拉起的 serve 子进程（外部已在跑则为 None）
         self.load_credentials()
-        
+
         # Build initial static menu structure
         self.update_menu_items([])
-        
+
+        # 状态栏挂着 = 后端就该活着：serve 没在跑就自己拉起来，
+        # 用户不必再单独开一个终端敲命令。退出状态栏时会一并收掉（见 on_exit）。
+        self.ensure_backend()
+
         # Start a timer to refresh every 120 seconds
         self.refresh_timer = rumps.Timer(self.on_tick, 120)
         self.refresh_timer.start()
-        
+
         # Run first load
         self.refresh_data(force=False)
+
+    def backend_alive(self):
+        try:
+            requests.get("http://127.0.0.1:{}/".format(self.port), timeout=2)
+            return True
+        except Exception:
+            return False
+
+    def ensure_backend(self):
+        """serve 没在跑就拉起一个。已经在跑（比如用户自己开的）就不重复起。"""
+        if self.backend_alive():
+            return True
+        try:
+            self.serve_proc = subprocess.Popen(
+                [sys.executable, "-m", "usagehub", "serve", "--lan"],
+                cwd=str(Path(__file__).resolve().parent.parent),
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except Exception as e:
+            rumps.notification("UsageHub", "后端启动失败", str(e))
+            return False
+        # http.server 起得快，但仍给它几秒；轮询比死等 sleep 更快返回
+        for _ in range(20):
+            time.sleep(0.25)
+            if self.backend_alive():
+                return True
+        return False
 
     def load_credentials(self):
         if CONFIG_PATH.exists():
@@ -58,26 +86,22 @@ class UsageHubApp(rumps.App):
     def on_force_refresh(self, sender):
         self.refresh_data(force=True)
 
-    @rumps.clicked("同步浏览器 Cookie (免密)")
-    def on_sync_cookies(self, sender):
-        # Run the auto_configure_grok.py script in the background
-        if AUTO_CONFIGURE_PATH.exists():
-            try:
-                # Execute the script
-                subprocess.run([sys.executable, str(AUTO_CONFIGURE_PATH)], check=True)
-                rumps.notification("UsageHub", "同步成功", "已自动从 Chrome 解密并更新 SuperGrok Cookie！")
-                self.refresh_data(force=True)
-            except Exception as e:
-                rumps.notification("UsageHub", "同步失败", f"错误: {e}")
-        else:
-            rumps.notification("UsageHub", "同步失败", "未找到 Cookie 同步脚本")
-
     @rumps.clicked("打开网页面板")
     def on_open_web(self, sender):
         webbrowser.open(f"http://127.0.0.1:{self.port}/")
 
     @rumps.clicked("退出")
     def on_exit(self, sender):
+        # 只收自己拉起的那个 serve；用户自己开的进程不动它
+        if self.serve_proc and self.serve_proc.poll() is None:
+            try:
+                self.serve_proc.terminate()
+                self.serve_proc.wait(timeout=5)
+            except Exception:
+                try:
+                    self.serve_proc.kill()
+                except Exception:
+                    pass
         rumps.quit_application()
 
     def refresh_data(self, force=False):
@@ -97,6 +121,17 @@ class UsageHubApp(rumps.App):
             else:
                 self.show_error(f"HTTP 错误 {resp.status_code}")
         except Exception as e:
+            # 后端掉了（崩溃 / 被手动 kill / 睡眠唤醒后没恢复）：拉起来重试一次，
+            # 而不是把「连接失败」摆在那儿等用户自己去开终端
+            if self.ensure_backend():
+                try:
+                    auth = (self.username, self.password) if self.password else None
+                    resp = requests.get(url, auth=auth, timeout=15)
+                    if resp.status_code == 200:
+                        self.update_menu_items(resp.json().get("results", []))
+                        return
+                except Exception as e2:
+                    e = e2
             self.show_error(f"连接失败: {e}")
 
     def show_error(self, err_msg):
