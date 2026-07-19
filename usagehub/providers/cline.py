@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
-"""ClinePass（= Cline 官方账户体系）credits 余额。
+"""ClinePass（Cline 的开放权重模型订阅）用量限制。
 
-接口（源自 cline/cline 仓库 ClineAccountService）：
-  GET {base}/api/v1/users/me            → data.uid
-  GET {base}/api/v1/users/{uid}/balance → data.balance（单位：美分）
+ClinePass 是 $9.99/月 的订阅（转卖 DeepSeek/Qwen/Kimi/GLM/MiniMax 等），
+配额按「5 小时 / 每周 / 每月」三个滚动窗口计（不是美元余额）。
+
+接口（app.cline.bot 后台实际调用）：
+  GET {base}/api/v1/users/me                     → data.email（账号）
+  GET {base}/api/v1/users/me/plan/usage-limits   → data.limits[] 三个窗口的 percentUsed
 认证：Authorization: Bearer <key>；key 留空时自动从 cc-switch 数据库只读提取。
 """
 import json
@@ -17,9 +20,30 @@ from ..core import Window
 CCSWITCH_DB = Path.home() / ".cc-switch" / "cc-switch.db"
 
 
+def _norm_ts(ts):
+    """把 RFC3339 纳秒时间戳（...282685265Z）截成微秒，便于下游 fromisoformat 解析。"""
+    if not ts or not isinstance(ts, str):
+        return None
+    m = re.match(r"^(.*T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:?\d{2})?$", ts)
+    if not m:
+        return ts
+    base, frac, tz = m.group(1), m.group(2), m.group(3) or "Z"
+    if frac:
+        base += "." + frac[:6]
+    return base + tz
+
+
+# 窗口类型 → 中文标签
+_LIMIT_LABELS = {
+    "five_hour": "5小时窗口",
+    "weekly": "每周窗口",
+    "monthly": "每月窗口",
+}
+
+
 class ClineProbe(ProviderProbe):
     name = "cline"
-    display_name = "ClinePass (Cline)"
+    display_name = "ClinePass"
 
     def fetch(self):
         key = (self.cfg.get("api_key") or "").strip() or self._key_from_ccswitch()
@@ -33,24 +57,35 @@ class ClineProbe(ProviderProbe):
         headers = {"Authorization": "Bearer {}".format(key), "Content-Type": "application/json"}
 
         me = self._api(s, "{}/api/v1/users/me".format(base), headers)
-        uid = me.get("uid") or me.get("id")
-        if not uid:
-            return self.fail("users/me 返回中没有 uid: {}".format(json.dumps(me)[:200]))
-
-        bal = self._api(s, "{}/api/v1/users/{}/balance".format(base, uid), headers)
-        cents = bal.get("balance")
-        if cents is None:
-            return self.fail("balance 返回格式无法识别: {}".format(json.dumps(bal)[:200]))
-        dollars = float(cents) / 100.0
-
         account = me.get("email") or ""
-        win = Window(label="Credits 余额", remaining_abs=round(dollars, 2), unit="$")
-        return self.result(True, windows=[win], account=account,
-                           plan=str(me.get("subscription") or me.get("plan") or ""))
+
+        data = self._api(s, "{}/api/v1/users/me/plan/usage-limits".format(base), headers)
+        limits = data.get("limits") if isinstance(data, dict) else None
+        if not limits:
+            return self.fail("usage-limits 返回格式无法识别: {}".format(json.dumps(data)[:200]))
+
+        # 按 5h→周→月 固定顺序展示
+        order = {"five_hour": 0, "weekly": 1, "monthly": 2}
+        limits = sorted(limits, key=lambda x: order.get(x.get("type"), 9))
+        windows = []
+        for item in limits:
+            used = item.get("percentUsed")
+            if used is None:
+                continue
+            label = _LIMIT_LABELS.get(item.get("type"), item.get("type", "?"))
+            windows.append(Window(
+                label=label,
+                remaining_pct=max(0.0, 100.0 - float(used)),
+                resets_at=_norm_ts(item.get("resetsAt")),
+                mergeable=False,  # 三个窗口是不同时间维度，勿合并
+            ))
+        if not windows:
+            return self.fail("usage-limits 里没有可识别的窗口: {}".format(json.dumps(data)[:200]))
+        return self.result(True, windows=windows, account=account, plan="Cline Pass")
 
     @staticmethod
     def _api(session, url, headers):
-        resp = session.get(url, headers=headers, timeout=20)
+        resp = session.get(url, headers=headers, timeout=20, verify=False)
         if resp.status_code == 401:
             raise RuntimeError("Cline key 无效或过期（401）")
         if resp.status_code != 200:

@@ -18,10 +18,12 @@ def build_probes(config: dict, only=None):
     probes = []
     pcfg = config.get("providers", {})
     for name, cls in ALL_PROBES.items():
+        if only is not None and name not in only:
+            continue
         c = pcfg.get(name, {})
-        if only is not None:
-            if name in only:
+        if only is not None or c.get("enabled", True):
+            if hasattr(cls, "create_probes"):
+                probes.extend(cls.create_probes(c, config))
+            else:
                 probes.append(cls(c, config))
-        elif c.get("enabled", True):
-            probes.append(cls(c, config))
     return probes
