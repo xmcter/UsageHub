@@ -15,6 +15,9 @@ DEFAULT_CONFIG = {
     "proxy": "",
     # Web 面板 /api/usage 的结果缓存秒数（面板轮询不会每次都打上游）
     "cache_seconds": 300,
+    # Web 面板 Basic Auth 认证：密码非空时启用；若为空，则建议启动时随机生成一个并写入配置
+    "auth_username": "admin",
+    "auth_password": "",
     "providers": {
         "claude": {
             "enabled": True,
@@ -37,7 +40,9 @@ DEFAULT_CONFIG = {
         },
         "antigravity": {
             "enabled": True,
-            # 本地探测，无需配置；language server 端口/csrf 自动发现
+            # 多账号：自动读 CodexBar tokenAccounts + 钥匙串 gemini/antigravity + 本地 LS。
+            # 也可手动补：[{"email":"a@x.com","refresh_token":"...","client_id":"...","client_secret":"..."}]
+            "accounts": [],
         },
     },
 }

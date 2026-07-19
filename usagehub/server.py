@@ -38,6 +38,36 @@ def make_handler(cfg):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             parsed = urlparse(self.path)
+            
+            # 静态页面免密访问以允许前端 JS 载入
+            if parsed.path in ("/", "/index.html"):
+                self._send(200, INDEX_HTML.read_bytes(), "text/html; charset=utf-8")
+                return
+
+            # API 请求执行 Basic Auth 校验
+            expected_username = cfg.get("auth_username", "admin")
+            expected_password = cfg.get("auth_password", "")
+            if expected_password:
+                import base64
+                auth_header = self.headers.get("Authorization")
+                authenticated = False
+                if auth_header and auth_header.startswith("Basic "):
+                    try:
+                        encoded = auth_header.split(" ", 1)[1]
+                        decoded = base64.b64decode(encoded).decode("utf-8")
+                        user, pwd = decoded.split(":", 1)
+                        if user == expected_username and pwd == expected_password:
+                            authenticated = True
+                    except Exception:
+                        pass
+                if not authenticated:
+                    self.send_response(401)
+                    # 不返回 WWW-Authenticate 标头以阻止浏览器弹出原生 Basic Auth 登录框，由前端进行美化并保存密码至 localStorage
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(b"Unauthorized")
+                    return
+
             if parsed.path == "/api/usage":
                 force = parse_qs(parsed.query).get("force", ["0"])[0] == "1"
                 try:
@@ -47,8 +77,6 @@ def make_handler(cfg):
                 except Exception as e:
                     self._send(500, json.dumps({"error": str(e)}).encode("utf-8"),
                                "application/json; charset=utf-8")
-            elif parsed.path in ("/", "/index.html"):
-                self._send(200, INDEX_HTML.read_bytes(), "text/html; charset=utf-8")
             else:
                 self._send(404, b"not found", "text/plain")
 
@@ -67,9 +95,23 @@ def make_handler(cfg):
 
 
 def serve(cfg, host, port):
+    if not cfg.get("auth_password"):
+        import secrets
+        new_pass = secrets.token_hex(4)
+        cfg["auth_password"] = new_pass
+        from .config import save_config
+        try:
+            save_config(cfg)
+            print("【安全验证】已为您自动生成随机密码 '{}' 并写入 config.json".format(new_pass))
+        except Exception as e:
+            print("【安全警告】自动保存随机密码失败: {}".format(e))
+
     httpd = ThreadingHTTPServer((host, port), make_handler(cfg))
     shown = host if host != "0.0.0.0" else "0.0.0.0（局域网设备用本机 IP 访问）"
     print("UsageHub 面板: http://{}:{}/".format(shown, port))
+    if cfg.get("auth_password"):
+        print("访问用户名: {}".format(cfg.get("auth_username", "admin")))
+        print("访问密码: {}".format(cfg["auth_password"]))
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

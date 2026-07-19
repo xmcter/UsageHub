@@ -3,88 +3,647 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>UsageHub · AI 订阅余额</title>
+<title>UsageHub · AI Coding Quotas</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='1' x2='1' y2='0'%3E%3Cstop offset='0' stop-color='%233b82f6'/%3E%3Cstop offset='1' stop-color='%2310b981'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='24' height='24' rx='6' fill='%230b0c10'/%3E%3Cpath d='M4.5 16.5a7.5 7.5 0 0 1 15 0' fill='none' stroke='url(%23g)' stroke-width='2.2' stroke-linecap='round'/%3E%3Cline x1='12' y1='16.5' x2='16' y2='9.5' stroke='%23f3f4f6' stroke-width='1.8' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='16.5' r='1.6' fill='%23f3f4f6'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root { color-scheme: dark; }
-  * { box-sizing: border-box; margin: 0; }
-  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-         background: #0f1115; color: #e6e6e6; padding: 16px; }
-  h1 { font-size: 18px; margin-bottom: 4px; }
-  #meta { color: #8a8f98; font-size: 12px; margin-bottom: 16px; }
-  #meta button { margin-left: 8px; background: #22262e; color: #e6e6e6; border: 1px solid #333;
-                 border-radius: 6px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
-  .card { background: #171a21; border: 1px solid #262b35; border-radius: 12px; padding: 14px; }
-  .card.err { border-color: #5c2b2b; }
-  .card h2 { font-size: 15px; margin-bottom: 2px; }
-  .sub { color: #8a8f98; font-size: 12px; margin-bottom: 10px; }
-  .win { margin: 8px 0; }
-  .win .lbl { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
-  .win .lbl .rst { color: #8a8f98; font-size: 12px; }
-  .track { height: 8px; background: #262b35; border-radius: 4px; overflow: hidden; }
-  .fill { height: 100%; border-radius: 4px; background: #3fb26f; transition: width .3s; }
-  .fill.warn { background: #d9a441; }
-  .fill.crit { background: #d94141; }
-  .errmsg { color: #e08585; font-size: 12px; white-space: pre-wrap; margin-top: 6px; }
-  .warnmsg { color: #d9a441; font-size: 12px; white-space: pre-wrap; margin-top: 6px; }
+  :root {
+    color-scheme: dark;
+    --bg-main: #0b0c10;
+    --bg-popover: rgba(22, 26, 37, 0.72);
+    --border-color: rgba(255, 255, 255, 0.08);
+    --text-primary: #f3f4f6;
+    --text-secondary: #9ca3af;
+    --text-muted: #6b7280;
+    --primary-color: #3b82f6;
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg-main);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.12) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%);
+    background-attachment: fixed;
+  }
+
+  /* macOS Popover Container */
+  .popover {
+    width: 100%;
+    max-width: 440px;
+    background: var(--bg-popover);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    overflow: hidden;
+    animation: popoverFade 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: max-width 0.3s ease;
+  }
+
+  @keyframes popoverFade {
+    from { opacity: 0; transform: translateY(10px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* Header Section */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 20px 14px 20px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .logo-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .logo-title h1 {
+    font-family: 'Outfit', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #fff 30%, #a5b4fc 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .logo-icon {
+    font-size: 18px;
+  }
+
+  .refresh-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+    border-radius: 8px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .refresh-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  .refresh-btn svg {
+    width: 14px;
+    height: 14px;
+    transition: transform 0.4s ease;
+  }
+
+  .refresh-btn.spinning svg {
+    transform: rotate(360deg);
+  }
+
+  /* Status Bar Info */
+  .meta-bar {
+    padding: 8px 20px;
+    background: rgba(0, 0, 0, 0.15);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* Providers List */
+  .providers-list {
+    padding: 16px 20px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    max-height: 520px;
+    overflow-y: auto;
+  }
+
+  .providers-list::-webkit-scrollbar {
+    width: 6px;
+  }
+  .providers-list::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .providers-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+  }
+
+  @media (min-width: 768px) {
+    .popover {
+      max-width: 880px;
+    }
+    .providers-list {
+      grid-template-columns: repeat(2, 1fr);
+      max-height: none;
+      overflow-y: visible;
+    }
+  }
+
+  /* Provider Card */
+  .card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 12px;
+    padding: 12px 14px;
+    transition: all 0.2s ease;
+  }
+
+  .card:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .card.err {
+    border-left: 3px solid var(--danger-color);
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+  }
+
+  .card-title-group h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .card-subtitle {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 1px;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--success-color);
+    box-shadow: 0 0 8px var(--success-color);
+  }
+
+  .status-dot.err {
+    background: var(--danger-color);
+    box-shadow: 0 0 8px var(--danger-color);
+  }
+
+  /* Usage Windows */
+  .win {
+    margin-top: 10px;
+  }
+
+  .win:not(:first-child) {
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.03);
+  }
+
+  .win-label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+
+  .win-name {
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .win-stats {
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .badge-reset {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    color: var(--text-muted);
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 400;
+  }
+
+  /* Progress Bar */
+  .track {
+    height: 5px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 2.5px;
+    overflow: hidden;
+  }
+
+  .fill {
+    height: 100%;
+    border-radius: 2.5px;
+    background: linear-gradient(90deg, #10b981, #34d399);
+    transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .fill.warn {
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+  }
+
+  .fill.crit {
+    background: linear-gradient(90deg, #ef4444, #f87171);
+  }
+
+  /* Subscription pill badge */
+  .sub-badge {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
+  /* Message overlays */
+  .errmsg {
+    color: #f87171;
+    font-size: 11px;
+    margin-top: 6px;
+    background: rgba(239, 68, 68, 0.06);
+    border: 1px solid rgba(239, 68, 68, 0.1);
+    padding: 6px 10px;
+    border-radius: 6px;
+    line-height: 1.4;
+  }
+
+  .warnmsg {
+    color: #fbbf24;
+    font-size: 11px;
+    margin-top: 6px;
+    background: rgba(245, 158, 11, 0.06);
+    border: 1px solid rgba(245, 158, 11, 0.1);
+    padding: 6px 10px;
+    border-radius: 6px;
+    line-height: 1.4;
+  }
+
+  /* Login Modal */
+  .login-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(11, 12, 16, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    animation: fadeIn 0.2s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; } to { opacity: 1; }
+  }
+
+  .login-modal {
+    background: rgba(22, 26, 37, 0.95);
+    border: 1px solid var(--border-color);
+    border-radius: 18px;
+    padding: 24px;
+    width: 90%;
+    max-width: 360px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+    text-align: center;
+  }
+
+  .login-modal h2 {
+    font-family: 'Outfit', sans-serif;
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+
+  .login-modal p {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  .input-group input {
+    width: 100%;
+    background: rgba(0,0,0,0.2);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    outline: none;
+    transition: all 0.2s ease;
+  }
+
+  .input-group input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  }
+
+  .remember-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    margin: 12px 0 16px 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .remember-row label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+
+  .login-btn {
+    width: 100%;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+
+  .login-btn:hover {
+    background: #2563eb;
+  }
+
+  .login-error-msg {
+    color: var(--danger-color);
+    font-size: 11px;
+    margin-bottom: 10px;
+    min-height: 14px;
+  }
 </style>
 </head>
 <body>
-<h1>UsageHub</h1>
-<div id="meta">加载中…</div>
-<div class="grid" id="grid"></div>
+<div class="popover">
+  <div class="header">
+    <div class="logo-title">
+      <span class="logo-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="uh-logo" x1="0" y1="1" x2="1" y2="0">
+              <stop offset="0" stop-color="#3b82f6"/>
+              <stop offset="1" stop-color="#10b981"/>
+            </linearGradient>
+          </defs>
+          <path d="M4.5 16.5a7.5 7.5 0 0 1 15 0" fill="none" stroke="url(#uh-logo)" stroke-width="2.2" stroke-linecap="round"/>
+          <line x1="12" y1="16.5" x2="16" y2="9.5" stroke="#f3f4f6" stroke-width="1.8" stroke-linecap="round"/>
+          <circle cx="12" cy="16.5" r="1.7" fill="#f3f4f6"/>
+        </svg>
+      </span>
+      <h1>UsageHub</h1>
+    </div>
+    <button class="refresh-btn" id="refresh" onclick="load(true)" title="强制刷新">
+      <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M13.65 2.35C12.19 0.9 10.21 0 8 0C3.58 0 0 3.58 0 8C0 12.42 3.58 16 8 16C11.73 16 14.84 13.45 15.7 10H13.6C12.8 12.33 10.6 14 8 14C4.69 14 2 11.31 2 8C2 4.69 4.69 2 8 2C9.66 2 11.14 2.69 12.22 3.78L9 7H16V0L13.65 2.35Z" fill="currentColor"/>
+      </svg>
+    </button>
+  </div>
+  <div class="meta-bar" id="meta">
+    <span>正在同步 AI 配额...</span>
+    <span>-</span>
+  </div>
+  <div class="providers-list" id="list"></div>
+</div>
+
+<div class="login-overlay" id="login-overlay" style="display: none;">
+  <div class="login-modal">
+    <h2>🔑 登录认证</h2>
+    <p>请输入 UsageHub 的访问密码以查看配额。</p>
+    <div id="login-error" class="login-error-msg"></div>
+    <input type="hidden" id="username" value="admin">
+    <div class="input-group">
+      <input type="password" id="password" placeholder="请输入密码" onkeydown="if(event.key==='Enter') submitLogin()">
+    </div>
+    <div class="remember-row">
+      <label><input type="checkbox" id="remember" checked> 记住登录状态 (本地持久化)</label>
+    </div>
+    <button class="login-btn" onclick="submitLogin()">确认登录</button>
+  </div>
+</div>
+
 <script>
-async function load(force) {
-  const meta = document.getElementById('meta');
-  try {
-    const r = await fetch('/api/usage' + (force ? '?force=1' : ''));
-    const d = await r.json();
-    render(d);
-  } catch (e) { meta.textContent = '加载失败: ' + e; }
+function getAuthHeader() {
+  return localStorage.getItem('usagehub_auth') || window.sessionAuth || '';
 }
-function pctClass(p) { return p === null ? '' : p < 15 ? 'crit' : p < 35 ? 'warn' : ''; }
+
+async function load(force) {
+  const btn = document.getElementById('refresh');
+  btn.classList.add('spinning');
+  
+  const headers = {};
+  const auth = getAuthHeader();
+  if (auth) {
+    headers['Authorization'] = auth;
+  }
+  
+  try {
+    const r = await fetch('/api/usage' + (force ? '?force=1' : ''), { headers });
+    if (r.status === 401) {
+      showLoginModal();
+      return;
+    }
+    const d = await r.json();
+    hideLoginModal();
+    render(d);
+  } catch (e) { 
+    document.getElementById('meta').innerHTML = '<span>同步失败: ' + e + '</span>'; 
+  } finally {
+    setTimeout(() => btn.classList.remove('spinning'), 400);
+  }
+}
+
+function showLoginModal() {
+  document.getElementById('login-overlay').style.display = 'flex';
+  document.getElementById('password').focus();
+}
+
+function hideLoginModal() {
+  document.getElementById('login-overlay').style.display = 'none';
+}
+
+function submitLogin() {
+  const user = document.getElementById('username').value.trim() || 'admin';
+  const pass = document.getElementById('password').value.trim();
+  const remember = document.getElementById('remember').checked;
+  const errDiv = document.getElementById('login-error');
+  
+  if (!pass) {
+    errDiv.textContent = '请输入密码';
+    return;
+  }
+  
+  const auth = 'Basic ' + btoa(user + ':' + pass);
+  errDiv.textContent = '';
+  
+  fetch('/api/usage', { headers: { 'Authorization': auth } })
+    .then(async (r) => {
+      if (r.status === 401) {
+        errDiv.textContent = '密码错误，请重新输入';
+        return;
+      }
+      if (r.ok) {
+        if (remember) {
+          localStorage.setItem('usagehub_auth', auth);
+        } else {
+          localStorage.removeItem('usagehub_auth');
+          window.sessionAuth = auth;
+        }
+        hideLoginModal();
+        const d = await r.json();
+        render(d);
+      } else {
+        errDiv.textContent = '登录失败: HTTP ' + r.status;
+      }
+    })
+    .catch(e => {
+      errDiv.textContent = '网络连接错误: ' + e;
+    });
+}
+
+// p 为已用百分比：用得越多越危险
+function pctClass(p) { return p === null ? '' : p > 85 ? 'crit' : p > 65 ? 'warn' : ''; }
+
 function countdown(iso) {
   if (!iso) return '';
   const t = new Date(iso) - Date.now();
   if (isNaN(t) || t <= 0) return '';
-  const h = Math.floor(t / 3600000), m = Math.floor(t % 3600000 / 60000);
-  return '重置 ' + (h ? h + 'h' : '') + String(m).padStart(2, '0') + 'm 后';
+  const d = Math.floor(t / 86400000);
+  const h = Math.floor(t % 86400000 / 3600000);
+  const m = Math.floor(t % 3600000 / 60000);
+  if (d) return h ? d + '天' + h + '小时' : d + '天';
+  return (h ? h + 'h ' : '') + m + 'm';
 }
+
+const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+function isWeekly(label) { return label && label.indexOf('周') >= 0 && label.indexOf('月') < 0; }
+function weekdayReset(iso) {
+  const dt = new Date(iso);
+  if (isNaN(dt)) return '';
+  // JS getDay(): 0=周日..6=周六，转成 周一起始
+  const wd = WEEKDAYS[(dt.getDay() + 6) % 7];
+  const hh = String(dt.getHours()).padStart(2, '0');
+  const mm = String(dt.getMinutes()).padStart(2, '0');
+  return wd + ' ' + hh + ':' + mm;
+}
+// 周窗口显示"周X 重置"，其他窗口显示倒计时
+function resetBadge(label, iso) {
+  if (!iso) return '';
+  if (isWeekly(label)) { const w = weekdayReset(iso); return w ? w + ' 重置' : ''; }
+  return countdown(iso);
+}
+
 function render(d) {
-  document.getElementById('meta').innerHTML =
-    '抓取于 ' + new Date(d.generated_at).toLocaleTimeString() +
-    '（缓存 ' + d.cache_seconds + 's）<button onclick="load(true)">强制刷新</button>';
-  const grid = document.getElementById('grid');
-  grid.innerHTML = '';
+  const meta = document.getElementById('meta');
+  meta.innerHTML = 
+    '<span>已抓取: ' + new Date(d.generated_at).toLocaleTimeString() + '</span>' +
+    '<span>缓存: ' + d.cache_seconds + 's</span>';
+    
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  
   for (const r of d.results) {
     const card = document.createElement('div');
     card.className = 'card' + (r.ok ? '' : ' err');
-    let html = '<h2>' + (r.ok ? '' : '❌ ') + esc(r.display_name) + '</h2>';
-    html += '<div class="sub">' + (esc([r.plan, r.account].filter(Boolean).join(' · ')) || '&nbsp;') + '</div>';
+    
+    // Header
+    let html = '<div class="card-header"><div class="card-title-group"><h2>' + esc(r.display_name) + '</h2>';
+    const sub = [r.plan, r.account].filter(Boolean).join(' · ');
+    if (sub) {
+      html += '<div class="card-subtitle">' + esc(sub) + '</div>';
+    }
+    html += '</div>';
+    html += '<div class="status-dot' + (r.ok ? '' : ' err') + '"></div></div>';
+    
+    // Windows
     for (const w of r.windows || []) {
-      const p = w.remaining_pct;
-      let right = [];
-      if (p !== null && p !== undefined) right.push(p.toFixed(1) + '%');
-      if (w.remaining_abs !== null && w.remaining_abs !== undefined)
-        right.push(fmtAbs(w.remaining_abs, w.limit_abs, w.unit));
-      html += '<div class="win"><div class="lbl"><span>' + esc(w.label) + '</span>' +
-        '<span>' + right.join(' · ') + ' <span class="rst">' + countdown(w.resets_at) + '</span></span></div>';
-      if (p !== null && p !== undefined)
+      const p = (w.remaining_pct === null || w.remaining_pct === undefined) ? null : 100 - w.remaining_pct;
+      html += '<div class="win"><div class="win-label-row">';
+      html += '<span class="win-name">' + esc(w.label) + '</span>';
+
+      html += '<span class="win-stats">';
+      if (w.unit === '已启用') {
+        html += '<span class="sub-badge">订阅已启用</span>';
+      } else {
+        if (p !== null) html += '<span>已用 ' + p.toFixed(1) + '%</span>';
+        if (w.remaining_abs !== null && w.remaining_abs !== undefined) {
+          html += '<span>·</span><span>' + fmtAbs(w.remaining_abs, w.limit_abs, w.unit) + '</span>';
+        }
+      }
+
+      const cd = resetBadge(w.label, w.resets_at);
+      if (cd) {
+        html += '<span class="badge-reset">' + cd + '</span>';
+      }
+      html += '</span></div>';
+
+      if (p !== null && w.unit !== '已启用') {
         html += '<div class="track"><div class="fill ' + pctClass(p) + '" style="width:' + Math.max(0, Math.min(100, p)) + '%"></div></div>';
+      }
       html += '</div>';
     }
+    
     if (!r.ok) html += '<div class="errmsg">' + esc(r.error) + '</div>';
-    else if (r.error) html += '<div class="warnmsg">⚠ ' + esc(r.error) + '</div>';
+    else if (r.error) html += '<div class="warnmsg">' + esc(r.error) + '</div>';
+    
     card.innerHTML = html;
-    grid.appendChild(card);
+    list.appendChild(card);
   }
 }
+
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
 function fmtAbs(rem, limit, unit) {
-  const range = rem + (limit ? ' / ' + limit : '');
-  if (unit === '$') return '$' + range;      // 货币前缀
-  return range + (unit ? ' ' + unit : '');   // 其他单位后缀
+  // 展示"已用/总量"；没有总量时退回展示剩余
+  let range;
+  if (limit) {
+    const used = Math.round((limit - rem) * 10000) / 10000;
+    range = used + ' / ' + limit;
+  } else {
+    range = '剩 ' + rem;
+  }
+  if (unit === '$') return '$' + range;
+  return range + (unit ? ' ' + unit : '');
 }
+
 load(false);
 setInterval(() => load(false), 60000);
 </script>
