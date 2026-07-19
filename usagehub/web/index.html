@@ -11,7 +11,7 @@
   :root {
     color-scheme: light dark;
     --bg-main: #f4f5f2;
-    --bg-popover: rgba(255, 255, 255, 0.82);
+    --bg-popover: #ffffff;
     --border-color: #dcdfd9;
     --text-primary: #14181f;
     --text-secondary: #565f6b;
@@ -34,14 +34,14 @@
     --control-border-hover: rgba(20,24,31,.15);
     --meta-bg: rgba(20,24,31,.03);
     --scroll-thumb: rgba(20,24,31,.15);
-    --popover-shadow: 0 1px 2px rgba(20,23,28,.06), 0 16px 40px rgba(20,23,28,.10);
+    --popover-shadow: 0 1px 2px rgba(20,23,28,.06), 0 8px 24px rgba(20,23,28,.06);
     --overlay-scrim: rgba(244,245,242,.86);
     --overlay-panel: #ffffff;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg-main: #0c0f14;
-      --bg-popover: rgba(18, 22, 29, 0.72);
+      --bg-popover: #12161d;
       --border-color: #262b33;
       --text-primary: #e7ebe6;
       --text-secondary: #9aa3ab;
@@ -63,7 +63,7 @@
       --control-border-hover: rgba(255,255,255,.15);
       --meta-bg: rgba(0,0,0,.15);
       --scroll-thumb: rgba(255,255,255,.1);
-      --popover-shadow: 0 20px 40px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.04);
+      --popover-shadow: none;
       --overlay-scrim: rgba(11,12,16,.85);
       --overlay-panel: #12161d;
     }
@@ -79,30 +79,21 @@
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
                  "Microsoft YaHei", system-ui, sans-serif;
     background: var(--bg-main);
+    background-image:
+      radial-gradient(1200px 600px at 50% -10%, rgba(200, 114, 44, 0.10) 0px, transparent 70%);
+    background-repeat: no-repeat;
     color: var(--text-primary);
     min-height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 20px;
-    background-image: 
-      radial-gradient(at 50% -10%, rgba(200, 114, 44, 0.10) 0px, transparent 60%);
-    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
   }
 
   /* macOS Popover Container */
+  /* 与导航站 .wrap、情报站容器同规格：整页平铺，不再是悬浮弹层 */
   .popover {
     width: 100%;
-    max-width: 440px;
-    background: var(--bg-popover);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--border-color);
-    border-radius: 20px;
-    box-shadow: var(--popover-shadow);
-    overflow: hidden;
-    animation: popoverFade 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    transition: max-width 0.3s ease;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 72px 24px 56px;
   }
 
   @keyframes popoverFade {
@@ -114,9 +105,10 @@
   .header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    padding: 18px 20px 14px 20px;
-    border-bottom: 1px solid var(--border-color);
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 24px;
   }
 
   /* 返回同域导航站（forcine.dpdns.org）的入口，压在标题上方 */
@@ -143,17 +135,14 @@
   }
 
   .logo-title h1 {
-    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
-                 "Microsoft YaHei", system-ui, sans-serif;
-    font-size: 18px;
-    font-weight: 700;
-    letter-spacing: -0.5px;
+    font-size: 30px;
+    font-weight: 650;
+    letter-spacing: -.02em;
     color: var(--text-primary);
   }
 
-  .logo-icon {
-    font-size: 18px;
-  }
+  .logo-icon { display: inline-flex; }
+  .logo-icon svg { width: 26px; height: 26px; }
 
   .refresh-btn {
     background: var(--control-bg);
@@ -186,10 +175,10 @@
 
   /* Status Bar Info */
   .meta-bar {
-    padding: 8px 20px;
-    background: var(--meta-bg);
+    padding: 0 0 16px 0;
     border-bottom: 1px solid var(--border-color);
-    font-size: 11px;
+    margin-bottom: 20px;
+    font-size: 12px;
     color: var(--text-muted);
     display: flex;
     justify-content: space-between;
@@ -198,12 +187,9 @@
 
   /* Providers List */
   .providers-list {
-    padding: 16px 20px;
     display: grid;
-    grid-template-columns: 1fr;
-    gap: 16px;
-    max-height: 520px;
-    overflow-y: auto;
+    grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+    gap: 14px;
   }
 
   .providers-list::-webkit-scrollbar {
@@ -217,28 +203,23 @@
     border-radius: 3px;
   }
 
-  @media (min-width: 768px) {
-    .popover {
-      max-width: 880px;
-    }
-    .providers-list {
-      grid-template-columns: repeat(2, 1fr);
-      max-height: none;
-      overflow-y: visible;
-    }
+  @media (max-width: 560px) {
+    .popover { padding: 48px 18px 40px; }
+    .logo-title h1 { font-size: 25px; }
   }
 
   /* Provider Card */
   .card {
-    background: var(--surface);
-    border: 1px solid var(--surface-border);
-    border-radius: 12px;
-    padding: 12px 14px;
-    transition: all 0.2s ease;
+    background: var(--bg-popover);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: var(--popover-shadow);
+    transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
   }
 
   .card:hover {
-    background: var(--surface-hover);
+    transform: translateY(-2px);
     border-color: var(--surface-border-hover);
   }
 
