@@ -73,6 +73,23 @@
     border-bottom: 1px solid var(--border-color);
   }
 
+  /* 返回同域导航站（forcine.dpdns.org）的入口，压在标题上方 */
+  .home-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-bottom: 3px;
+    color: var(--text-muted);
+    font-size: 11.5px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: color .15s ease, transform .15s ease;
+  }
+  .home-link:hover {
+    color: var(--primary-color);
+    transform: translateX(-2px);
+  }
+
   .logo-title {
     display: flex;
     align-items: center;
@@ -415,6 +432,14 @@
 <body>
 <div class="popover">
   <div class="header">
+    <div>
+    <a class="home-link" href="https://forcine.dpdns.org" title="返回 forcine 服务导航">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M15 18l-6-6 6-6"></path>
+      </svg>
+      forcine
+    </a>
     <div class="logo-title">
       <span class="logo-icon">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -430,6 +455,7 @@
         </svg>
       </span>
       <h1>UsageHub</h1>
+    </div>
     </div>
     <button class="refresh-btn" id="refresh" onclick="load(true)" title="强制刷新">
       <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
