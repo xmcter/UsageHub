@@ -45,13 +45,16 @@ class ClaudeProbe(ProviderProbe):
     display_name = "Claude 订阅"
 
     def fetch(self):
+        self._why = []          # 记录各条发现路径为什么没命中，失败时回显
         token = self._find_token()
         if not token:
+            detail = ("\n诊断：" + "；".join(self._why)) if self._why else ""
             return self.fail(
                 "未找到 Claude Code OAuth 凭据。任选其一：\n"
                 "1) 终端跑 `claude setup-token` 生成长期 token，填入 ~/.usagehub/config.json 的 providers.claude.oauth_token；\n"
                 "2) 用 `claude /login` 登录官方账号（会写入钥匙串/.credentials.json）\n"
                 "3) 用 Chrome 登录 claude.ai（会自动从浏览器 Cookie 提取 sessionKey）"
+                + detail
             )
         is_session = token.startswith("sk-ant-sid")
         if is_session:
@@ -121,10 +124,17 @@ class ClaudeProbe(ProviderProbe):
         )
 
     # ---- token 发现链 ----
+    def _note(self, msg):
+        """记一条「这条路径为什么没命中」，失败时一起回显，省得用户对着通用提示猜。"""
+        if not hasattr(self, "_why") or self._why is None:
+            self._why = []
+        self._why.append(msg)
+
     def _find_token(self):
         tok = (self.cfg.get("oauth_token") or "").strip()
         if tok:
             return tok
+        self._note("config.json 里 oauth_token 为空")
         tok = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "").strip()
         if tok:
             return tok
@@ -132,9 +142,11 @@ class ClaudeProbe(ProviderProbe):
             tok = self._from_keychain()
             if tok:
                 return tok
+            self._note("钥匙串没有 Claude Code-credentials 条目")
         tok = self._from_credentials_file()
         if tok:
             return tok
+        self._note("~/.claude/.credentials.json 不存在或无 accessToken")
         if platform.system() == "Darwin":
             return self._from_browser_session()
         return None
@@ -190,19 +202,29 @@ class ClaudeProbe(ProviderProbe):
         found.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         return found
 
-    @staticmethod
-    def _chrome_safe_storage_key():
-        """Safe Storage 密码是每台机器随机生成、存在钥匙串里的，不能写死在源码里。"""
+    def _chrome_safe_storage_key(self):
+        """Safe Storage 密码是每台机器随机生成、存在钥匙串里的，不能写死在源码里。
+
+        注意：首次由新解释器读取时 macOS 会弹钥匙串授权框（可能被其他窗口挡住），
+        用户不点就会一直等到 timeout——所以这里把超时单独记成一条诊断。
+        """
         try:
             out = subprocess.run(
                 ["security", "find-generic-password", "-s", "Chrome Safe Storage", "-w"],
                 capture_output=True, text=True, timeout=10,
             )
-            if out.returncode != 0 or not out.stdout.strip():
-                return None
-            chrome_pass = out.stdout.strip().encode()
-        except Exception:
+        except subprocess.TimeoutExpired:
+            self._note("读钥匙串 Chrome Safe Storage 超时——多半是 macOS 弹了授权框在等你点"
+                       "「始终允许」，窗口可能被挡住了")
             return None
+        except Exception as e:
+            self._note("读钥匙串 Chrome Safe Storage 出错: {}".format(e))
+            return None
+        if out.returncode != 0 or not out.stdout.strip():
+            self._note("钥匙串里没有 Chrome Safe Storage 条目（returncode={}），"
+                       "无法解密 Chrome cookie".format(out.returncode))
+            return None
+        chrome_pass = out.stdout.strip().encode()
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA1(),
             length=16,
@@ -211,17 +233,21 @@ class ClaudeProbe(ProviderProbe):
         )
         return kdf.derive(chrome_pass)
 
-    @staticmethod
-    def _from_browser_session():
+    def _from_browser_session(self):
         """从 Chrome 各 profile 的 Cookies 数据库提取 claude.ai 的 sessionKey。"""
         if not HAS_CRYPTO:
+            self._note("缺 cryptography 依赖，无法解密 Chrome cookie")
             return None
-        key = ClaudeProbe._chrome_safe_storage_key()
+        key = self._chrome_safe_storage_key()
         if key is None:
             return None
         import tempfile
         import shutil
-        for cookies_path in ClaudeProbe._chrome_profiles():
+        profiles = self._chrome_profiles()
+        if not profiles:
+            self._note("没找到任何 Chrome profile 的 Cookies 库")
+            return None
+        for cookies_path in profiles:
             try:
                 # 复制数据库到临时文件避免锁冲突
                 tmp_fd, tmp_path = tempfile.mkstemp(suffix=".db")
@@ -256,6 +282,10 @@ class ClaudeProbe(ProviderProbe):
                 tok = decrypted[32:].decode("utf-8")
                 if tok:
                     return tok
-            except Exception:
+            except Exception as e:
+                self._note("解析 {} 的 cookie 失败: {}".format(cookies_path.parent.name, e))
                 continue
+        self._note("扫了 {} 个 Chrome profile（{}），都没有 .claude.ai 的 sessionKey——"
+                   "请确认是在 Chrome（不是 Safari/Firefox）里登录的 claude.ai".format(
+                       len(profiles), "、".join(p.parent.name for p in profiles)))
         return None
