@@ -139,7 +139,6 @@ class UsageHubApp(rumps.App):
         self.menu.add(rumps.MenuItem(f"⚠️ {err_msg}"))
         self.menu.add(rumps.separator)
         self.menu.add(rumps.MenuItem("强制刷新", callback=self.on_force_refresh))
-        self.menu.add(rumps.MenuItem("同步浏览器 Cookie (免密)", callback=self.on_sync_cookies))
         self.menu.add(rumps.MenuItem("打开网页面板", callback=self.on_open_web))
         self.menu.add(rumps.MenuItem("退出", callback=self.on_exit))
 
@@ -213,7 +212,6 @@ class UsageHubApp(rumps.App):
                 
         # Add actions
         self.menu.add(rumps.MenuItem("强制刷新", callback=self.on_force_refresh))
-        self.menu.add(rumps.MenuItem("同步浏览器 Cookie (免密)", callback=self.on_sync_cookies))
         self.menu.add(rumps.MenuItem("打开网页面板", callback=self.on_open_web))
         self.menu.add(rumps.MenuItem("退出", callback=self.on_exit))
 
