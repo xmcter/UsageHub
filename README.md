@@ -30,7 +30,7 @@
 ## 安装
 
 ```bash
-git clone https://github.com/<your-account>/UsageHub.git
+git clone https://github.com/xmcter/UsageHub.git
 cd UsageHub
 uv venv --python 3.11 .venv
 uv pip install --python .venv/bin/python -r requirements.txt
