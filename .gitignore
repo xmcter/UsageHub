@@ -2,3 +2,10 @@ __pycache__/
 *.pyc
 .DS_Store
 dist/
+build/
+.venv/
+venv/
+*.db
+config.json
+.idea/
+.vscode/

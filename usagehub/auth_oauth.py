@@ -103,7 +103,7 @@ def auth_antigravity(timeout: int = 300) -> int:
         "state": state,
     }
     url = AUTH_URL + "?" + urllib.parse.urlencode(params)
-    print("将打开浏览器登录 Google（请选 user@example.com 或目标账号）…")
+    print("将打开浏览器登录 Google（请选择目标账号）…")
     print("若未自动打开，请手动访问：\n{}\n".format(url))
     print("回调地址: {}".format(redirect_uri))
     opened = False

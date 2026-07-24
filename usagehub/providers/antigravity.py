@@ -24,10 +24,11 @@ TOKENINFO_URL = "https://www.googleapis.com/oauth2/v3/tokeninfo"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 
 # CodexBar / Antigravity 桌面端常见 OAuth client（用于 refresh）
+# client_secret 可选通过 ANTIGRAVITY_CLIENT_SECRET 环境变量指定
 DEFAULT_CLIENTS = [
-    # CodexBar Antigravity OAuth
+    # CodexBar Antigravity OAuth (client_secret 运行时通过环境变量或 config.json 读取)
     ("884354919052-36trc1jjb3tguiac32ov6cod268c5blh.apps.googleusercontent.com",
-     ""),
+     os.environ.get("ANTIGRAVITY_CLIENT_SECRET", "")),
     # Antigravity / Gemini 桌面端
     ("1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com",
      ""),
