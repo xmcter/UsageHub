@@ -515,20 +515,65 @@
 </div>
 
 <script>
+// 快照模式：云端部署时会注入 window.__SNAPSHOT__ = {blob, generatedAt}
+// 密文用密码派生的 AES-GCM 密钥加密，明文永不出现在云上；本地 serve 模式下 SNAP 为 null 走 /api/usage
+const SNAP = (typeof window !== 'undefined' && window.__SNAPSHOT__) || null;
+
 function getAuthHeader() {
   return localStorage.getItem('usagehub_auth') || window.sessionAuth || '';
+}
+
+// ---- 快照解密（Web Crypto，与 Python 端 PBKDF2-SHA256/AES-GCM 对齐）----
+async function deriveKey(password, salt) {
+  const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(password),
+    'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 200000, hash: 'SHA-256' },
+    km, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+}
+async function decryptSnapshot(password) {
+  const raw = Uint8Array.from(atob(SNAP.blob), c => c.charCodeAt(0));
+  const salt = raw.slice(0, 16), iv = raw.slice(16, 28), data = raw.slice(28);
+  const key = await deriveKey(password, salt);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+function ageText(iso) {
+  const secs = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (secs < 90) return '刚刚';
+  if (secs < 3600) return Math.floor(secs / 60) + ' 分钟前';
+  if (secs < 86400) return Math.floor(secs / 3600) + ' 小时前';
+  return Math.floor(secs / 86400) + ' 天前';
 }
 
 async function load(force) {
   const btn = document.getElementById('refresh');
   btn.classList.add('spinning');
-  
+
+  // 快照模式：强制刷新 = 重新拉取静态页（拿到最新部署的快照）；否则用已存密码解密
+  if (SNAP) {
+    if (force) { location.reload(); return; }
+    const pw = localStorage.getItem('usagehub_pw');
+    if (!pw) { showLoginModal(); btn.classList.remove('spinning'); return; }
+    try {
+      const d = await decryptSnapshot(pw);
+      hideLoginModal();
+      render(d);
+    } catch (e) {
+      localStorage.removeItem('usagehub_pw');
+      showLoginModal();
+    } finally {
+      setTimeout(() => btn.classList.remove('spinning'), 400);
+    }
+    return;
+  }
+
   const headers = {};
   const auth = getAuthHeader();
   if (auth) {
     headers['Authorization'] = auth;
   }
-  
+
   try {
     const r = await fetch('/api/usage' + (force ? '?force=1' : ''), { headers });
     if (r.status === 401) {
@@ -538,8 +583,8 @@ async function load(force) {
     const d = await r.json();
     hideLoginModal();
     render(d);
-  } catch (e) { 
-    document.getElementById('meta').innerHTML = '<span>同步失败: ' + e + '</span>'; 
+  } catch (e) {
+    document.getElementById('meta').innerHTML = '<span>同步失败: ' + e + '</span>';
   } finally {
     setTimeout(() => btn.classList.remove('spinning'), 400);
   }
@@ -565,9 +610,21 @@ function submitLogin() {
     return;
   }
   
-  const auth = 'Basic ' + btoa(user + ':' + pass);
   errDiv.textContent = '';
-  
+
+  // 快照模式：用密码在本地解密内嵌密文，不发任何请求
+  if (SNAP) {
+    decryptSnapshot(pass).then(d => {
+      if (remember) localStorage.setItem('usagehub_pw', pass);
+      hideLoginModal();
+      render(d);
+    }).catch(() => {
+      errDiv.textContent = '密码错误，请重新输入';
+    });
+    return;
+  }
+
+  const auth = 'Basic ' + btoa(user + ':' + pass);
   fetch('/api/usage', { headers: { 'Authorization': auth } })
     .then(async (r) => {
       if (r.status === 401) {
@@ -627,9 +684,19 @@ function resetBadge(label, iso) {
 
 function render(d) {
   const meta = document.getElementById('meta');
-  meta.innerHTML = 
-    '<span>已抓取: ' + new Date(d.generated_at).toLocaleTimeString() + '</span>' +
-    '<span>缓存: ' + d.cache_seconds + 's</span>';
+  const gen = d.generated_at || (SNAP && SNAP.generatedAt);
+  if (SNAP) {
+    // 快照 > 40 分钟视为本机离线（关机/未联网），提示数据陈旧
+    const stale = gen && (Date.now() - new Date(gen)) > 40 * 60000;
+    const right = stale
+      ? '<span style="color:var(--warning-color)">⚠ 本机离线 · ' + ageText(gen) + '</span>'
+      : '<span style="color:var(--success-color)">● 数据新鲜</span>';
+    meta.innerHTML = '<span>数据截至: ' + (gen ? new Date(gen).toLocaleString() : '-') + '</span>' + right;
+  } else {
+    meta.innerHTML =
+      '<span>已抓取: ' + new Date(gen).toLocaleTimeString() + '</span>' +
+      '<span>缓存: ' + (d.cache_seconds || '-') + 's</span>';
+  }
     
   const list = document.getElementById('list');
   list.innerHTML = '';

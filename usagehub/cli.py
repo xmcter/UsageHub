@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 from .config import load_config, CONFIG_PATH
 from .core import run_probes
@@ -28,6 +29,11 @@ def main(argv=None):
     au_sub = au.add_subparsers(dest="auth_provider")
     au_ag = au_sub.add_parser("antigravity", help="浏览器 Google 登录 Antigravity 账号")
     au_ag.add_argument("--timeout", type=int, default=300, help="等待授权秒数，默认 300")
+
+    sn = sub.add_parser("snapshot", help="生成端到端加密的静态快照页（可推到常开静态站）")
+    sn.add_argument("--out", default=str(Path.home() / ".usagehub" / "cloud"),
+                    help="输出目录，默认 ~/.usagehub/cloud")
+    sn.add_argument("--deploy", action="store_true", help="生成后用 vercel --prod 部署")
     args = parser.parse_args(argv)
 
     cfg = load_config()
@@ -49,6 +55,22 @@ def main(argv=None):
             return auth_antigravity(timeout=args.timeout)
         print("用法: usagehub auth antigravity")
         return 2
+
+    if args.cmd == "snapshot":
+        from .cloud import write_snapshot
+        import subprocess
+        out_dir = Path(args.out)
+        out_file = write_snapshot(cfg, out_dir)
+        print("已生成加密快照: {}".format(out_file))
+        if args.deploy:
+            print("部署到 Vercel …")
+            r = subprocess.run(
+                ["npx", "vercel", "deploy", "--prod", "--yes"],
+                cwd=str(out_dir), capture_output=True, text=True)
+            out = (r.stdout + r.stderr).strip()
+            print(out[-500:])
+            return r.returncode
+        return 0
 
     only = [p.strip() for p in args.providers.split(",")] if args.providers else None
     if only:

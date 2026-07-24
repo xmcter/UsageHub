@@ -10,6 +10,20 @@ import rumps
 from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".usagehub" / "config.json"
+# 环形进度模板图标：assets/ring_000..ring_100.png（每 5% 一张，单色 + 透明底）。
+# set template=True 后 macOS 自动跟随亮/暗色反白。运行时按「当前最吃紧额度的已用%」
+# 选最近一张切换，图标即成实时进度环。menubar_icon.png 是无数据时的兜底。
+ICON_DIR = Path(__file__).resolve().parent / "assets"
+ICON_PATH = str(ICON_DIR / "menubar_icon.png")
+
+# 点产品表头 → 打开对应 App（优先）或官网（回退）
+PROVIDER_APP = {"claude": "Claude", "antigravity": "Antigravity"}
+PROVIDER_URL = {
+    "claude": "https://claude.ai",
+    "grok": "https://grok.com",
+    "cline": "https://app.cline.bot",
+    "antigravity": "https://antigravity.google",
+}
 
 def make_bar(pct, width=10):
     if pct is None:
@@ -19,8 +33,10 @@ def make_bar(pct, width=10):
 
 class UsageHubApp(rumps.App):
     def __init__(self):
-        super(UsageHubApp, self).__init__("📊")
-        self.title = "📊"
+        if os.path.exists(ICON_PATH):
+            super(UsageHubApp, self).__init__("UsageHub", icon=ICON_PATH, template=True)
+        else:
+            super(UsageHubApp, self).__init__("📊")  # 图标缺失时兜底用 emoji
         self.port = 8787
         self.username = "admin"
         self.password = ""
@@ -82,13 +98,33 @@ class UsageHubApp(rumps.App):
     def on_tick(self, sender):
         self.refresh_data(force=False)
 
-    @rumps.clicked("强制刷新")
+    @rumps.clicked("刷新")
     def on_force_refresh(self, sender):
         self.refresh_data(force=True)
 
     @rumps.clicked("打开网页面板")
     def on_open_web(self, sender):
         webbrowser.open(f"http://127.0.0.1:{self.port}/")
+
+    def _open_provider_cb(self, provider):
+        """生成一个「点该产品表头 → 打开对应 App / 官网」的回调。"""
+        def cb(sender):
+            self.open_provider(provider)
+        return cb
+
+    def open_provider(self, provider):
+        # 优先打开本机 App，装不了/没有则回退官网
+        app = PROVIDER_APP.get(provider)
+        if app:
+            try:
+                if subprocess.run(["open", "-a", app],
+                                  capture_output=True).returncode == 0:
+                    return
+            except Exception:
+                pass
+        url = PROVIDER_URL.get(provider)
+        if url:
+            webbrowser.open(url)
 
     @rumps.clicked("退出")
     def on_exit(self, sender):
@@ -138,7 +174,7 @@ class UsageHubApp(rumps.App):
         self.menu.clear()
         self.menu.add(rumps.MenuItem(f"⚠️ {err_msg}"))
         self.menu.add(rumps.separator)
-        self.menu.add(rumps.MenuItem("强制刷新", callback=self.on_force_refresh))
+        self.menu.add(rumps.MenuItem("刷新", callback=self.on_force_refresh))
         self.menu.add(rumps.MenuItem("打开网页面板", callback=self.on_open_web))
         self.menu.add(rumps.MenuItem("退出", callback=self.on_exit))
 
@@ -149,12 +185,19 @@ class UsageHubApp(rumps.App):
             self.menu.add(rumps.MenuItem("正在加载 AI 配额..."))
         else:
             for r in results:
-                mark = "🟢" if r.get("ok") else "🔴"
-                account = r.get("account") or r.get("plan") or ("正常" if r.get("ok") else "未知状态")
-                header_text = f"{mark} {r.get('display_name')} ({account})"
-                
-                header_item = rumps.MenuItem(header_text)
-                header_item.set_callback(None) # disabled label
+                account = r.get("account") or r.get("plan") or ""
+                name = r.get("display_name") or r.get("provider") or ""
+                header_text = f"{name}   {account}" if account else name
+                if not r.get("ok"):
+                    header_text = "⚠️  " + header_text
+
+                # 点表头 = 打开该产品的 App / 官网（快捷方式）
+                header_item = rumps.MenuItem(
+                    header_text, callback=self._open_provider_cb(r.get("provider")))
+                # 表头左侧放该产品的彩色 logo（不用 template，保留原色便于一眼识别）
+                logo = _logo_path(r.get("provider"))
+                if logo:
+                    header_item.set_icon(logo, dimensions=(20, 20))
                 self.menu.add(header_item)
                 
                 if not r.get("ok"):
@@ -167,55 +210,108 @@ class UsageHubApp(rumps.App):
                     for w in r.get("windows", []):
                         lbl = w.get("label", "")
                         pct = w.get("remaining_pct")
-                        rem = w.get("remaining_abs")
-                        limit = w.get("limit_abs")
-                        unit = w.get("unit", "")
-                        
                         used_pct = None if pct is None else 100.0 - pct
-                        stats_parts = []
+
+                        # 文字精简：去掉"已用/重置:"前缀，只留百分比与重置点
+                        parts = []
                         if used_pct is not None:
-                            stats_parts.append(f"已用 {used_pct:.1f}%")
-                        if rem is not None:
-                            if limit:
-                                used = round(limit - rem, 4)
-                                val_str = f"${used:g}/${limit:g}" if unit == "$" else f"{used:g}/{limit:g} {unit}".strip()
-                            else:
-                                val_str = f"剩 ${rem:g}" if unit == "$" else f"剩 {rem:g} {unit}".strip()
-                            stats_parts.append(val_str)
-                            
-                        # 周窗口直接显示"周X 重置"，其他窗口显示倒计时
+                            parts.append(f"{used_pct:.0f}%")
                         iso = w.get("resets_at")
                         if iso:
                             if is_weekly(lbl):
                                 wd = weekday_reset(iso)
                                 if wd:
-                                    stats_parts.append(f"{wd} 重置")
+                                    parts.append(wd)
                             else:
                                 cd = countdown(iso)
                                 if cd:
-                                    stats_parts.append(f"重置: {cd}")
-                            
-                        stats_str = " · ".join(stats_parts) if stats_parts else "已启用"
-                        
-                        # Add visual progress bar inside the menubar menu item!
-                        bar_str = make_bar(used_pct)
-                        if bar_str:
-                            item_text = f"    {lbl:<18}  {bar_str}  {stats_str}"
-                        else:
-                            item_text = f"    {lbl:<18}  {stats_str}"
-                            
+                                    parts.append(f"{cd}后")
+                        tail = "  ·  ".join(parts)
+                        short = _menu_label(lbl)
+                        item_text = f"{short}   {tail}" if tail else short
+
                         win_item = rumps.MenuItem(item_text)
+                        # 每行左侧一根横向进度条（按用量绿/黄/红变色，彩色故不用 template）
+                        bar = _bar_path(used_pct)
+                        if bar:
+                            win_item.set_icon(bar, dimensions=(40, 11))
                         win_item.set_callback(None)
                         self.menu.add(win_item)
                         
                 self.menu.add(rumps.separator)
                 
         # Add actions
-        self.menu.add(rumps.MenuItem("强制刷新", callback=self.on_force_refresh))
+        self.menu.add(rumps.MenuItem("刷新", callback=self.on_force_refresh))
         self.menu.add(rumps.MenuItem("打开网页面板", callback=self.on_open_web))
         self.menu.add(rumps.MenuItem("退出", callback=self.on_exit))
 
+        # 状态栏图标 = 实时进度环（跟随最吃紧的那条额度）
+        self._apply_progress_icon(results)
+
+    def _apply_progress_icon(self, results):
+        """状态栏图标 = 全部窗口「已用%」的平均值（整体用量，而非只盯最吃紧的一条）。"""
+        pcts = []
+        for r in results or []:
+            if not r.get("ok"):
+                continue
+            for w in r.get("windows", []):
+                p = w.get("remaining_pct")
+                if p is not None:
+                    pcts.append(100.0 - p)
+        if not pcts:
+            return
+        used = max(0.0, min(100.0, sum(pcts) / len(pcts)))
+        step = int(round(used / 5.0) * 5)          # 就近取 5% 的档
+        path = ICON_DIR / "ring_{:03d}.png".format(step)
+        if path.exists():
+            self.template = True
+            self.icon = str(path)
+
 _WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+
+
+def _short(label, n=30):
+    """截断过长标签（如 Antigravity 整串模型名），菜单里不至于拉得太宽。"""
+    label = (label or "").strip()
+    return label if len(label) <= n else label[:n - 1].rstrip() + "…"
+
+
+def _menu_label(label):
+    """菜单里的极简窗口名：5小时 / 本周 / 本月；其余截断。"""
+    s = (label or "").strip()
+    if "小时" in s:
+        return "5小时"
+    if "月" in s:
+        return "本月"
+    if "周" in s:
+        return "本周"
+    return _short(s, 14)
+
+
+def _ring_path(used_pct):
+    """按已用%就近取一枚环形图标（每 5% 一档），用于状态栏顶部图标。"""
+    if used_pct is None:
+        return None
+    step = int(round(max(0.0, min(100.0, used_pct)) / 5.0) * 5)
+    p = ICON_DIR / "ring_{:03d}.png".format(step)
+    return str(p) if p.exists() else None
+
+
+def _bar_path(used_pct):
+    """按已用%就近取一根横向进度条（每 5% 一档），给菜单行做图形进度。"""
+    if used_pct is None:
+        return None
+    step = int(round(max(0.0, min(100.0, used_pct)) / 5.0) * 5)
+    p = ICON_DIR / "bar_{:03d}.png".format(step)
+    return str(p) if p.exists() else None
+
+
+def _logo_path(provider):
+    """产品 logo（彩色），给菜单表头行识别是哪家。"""
+    if not provider:
+        return None
+    p = ICON_DIR / "logos" / "{}.png".format(provider)
+    return str(p) if p.exists() else None
 
 
 def is_weekly(label):
