@@ -34,6 +34,10 @@ def main(argv=None):
     sn.add_argument("--out", default=str(Path.home() / ".usagehub" / "cloud"),
                     help="输出目录，默认 ~/.usagehub/cloud")
     sn.add_argument("--deploy", action="store_true", help="生成后用 vercel --prod 部署")
+
+    nt = sub.add_parser("notify", help="检查额度是否恢复，恢复了就发邮件")
+    nt.add_argument("--dry-run", action="store_true", help="只检查并打印，不发邮件、不更新状态")
+    nt.add_argument("--test", action="store_true", help="发一封测试邮件，验证 SMTP 配置")
     args = parser.parse_args(argv)
 
     cfg = load_config()
@@ -56,12 +60,54 @@ def main(argv=None):
         print("用法: usagehub auth antigravity")
         return 2
 
+    if args.cmd == "notify":
+        from . import notify as nmod
+        if args.test:
+            try:
+                to = nmod.send_email(cfg, "UsageHub 测试邮件",
+                                     "这是一封测试邮件：额度恢复通知的 SMTP 配置正常。")
+            except Exception as e:
+                print("测试邮件发送失败: {}".format(e))
+                return 1
+            print("测试邮件已发往 {}".format(to))
+            return 0
+        try:
+            recovered, waste, sent, to = nmod.run(cfg, dry_run=args.dry_run)
+        except Exception as e:
+            print("检查失败: {}".format(e))
+            return 1
+        for it in recovered:
+            print("✅ {} · {}  已用 {:.0f}% → {:.0f}%（{}）".format(
+                it["provider"], it["label"], it["before"], it["after"], it["reason"]))
+        for it in waste:
+            print("⏳ {} · {}  剩余 {:.0f}%，{}后重置（{}）".format(
+                it["provider"], it["label"], it["remaining_pct"],
+                it["left_text"], it["reset_local"]))
+        if not recovered and not waste:
+            print("无需通知：没有「用紧后恢复」的窗口，也没有「快重置却还剩很多」的周/月额度"
+                  + ("；dry-run 未更新状态" if args.dry_run else ""))
+            return 0
+        print("已发邮件至 {}".format(to) if sent else "dry-run：未发邮件、未更新状态")
+        return 0
+
     if args.cmd == "snapshot":
         from .cloud import write_snapshot
         import subprocess
         out_dir = Path(args.out)
-        out_file = write_snapshot(cfg, out_dir)
+        # 一次探测两用：既做快照，也顺带检查额度恢复（省一次探测、少一次钥匙串弹窗）
+        probe_results = [r.to_dict() for r in run_probes(build_probes(cfg, None))]
+        out_file = write_snapshot(cfg, out_dir, results=probe_results)
         print("已生成加密快照: {}".format(out_file))
+        if (cfg.get("notify") or {}).get("enabled", True):
+            try:
+                from . import notify as nmod
+                rec, waste, sent, to = nmod.run(cfg, results=probe_results)
+                if rec or waste:
+                    print("通知：恢复 {} 项 / 待用完 {} 项，{}".format(
+                        len(rec), len(waste),
+                        "已发邮件至 {}".format(to) if sent else "邮件未发出"))
+            except Exception as e:
+                print("恢复通知检查跳过: {}".format(e))  # 不影响快照部署
         if args.deploy:
             print("部署到 Vercel …")
             r = subprocess.run(

@@ -6,12 +6,16 @@
 # 从此不用再碰终端。App 内部仍然只是拉起同一个 menu 程序，没有额外常驻服务。
 #
 # 重新生成：bash scripts/make-app.sh（覆盖式，改完代码不用重新打包，App 每次都读最新源码）
+#
+# 版本号：每次给这个 App 发布可感知的迭代，下面 CFBundleVersion / CFBundleShortVersionString
+# 都要 +0.1（全局规则，见 vault [[app-version-bump-rule]]）。
 
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY="$REPO/.venv/bin/python"
 APP="$HOME/Applications/UsageHub.app"
+ICON="$REPO/usagehub/assets/app_icon.icns"
 
 if [ ! -x "$PY" ]; then
   echo "找不到虚拟环境: $PY" >&2
@@ -20,7 +24,15 @@ if [ ! -x "$PY" ]; then
 fi
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+
+# 图标：assets/app_icon.icns 缺失时自动生成（需 .venv 里装了 pillow）
+if [ ! -f "$ICON" ]; then
+  echo "未找到图标，生成中…"
+  "$PY" -m pip show pillow >/dev/null 2>&1 || "$PY" -m pip install -q pillow
+  "$PY" "$REPO/scripts/make-app-icon.py"
+fi
+cp "$ICON" "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -30,10 +42,11 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleName</key><string>UsageHub</string>
   <key>CFBundleDisplayName</key><string>UsageHub</string>
   <key>CFBundleIdentifier</key><string>com.xmcter.usagehub</string>
-  <key>CFBundleVersion</key><string>1.0</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>1.2</string>
+  <key>CFBundleShortVersionString</key><string>1.2</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleExecutable</key><string>UsageHub</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <!-- 只在状态栏出现，不占 Dock、不抢 App 切换器 -->
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>

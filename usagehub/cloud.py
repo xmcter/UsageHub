@@ -37,13 +37,14 @@ def _encrypt(plaintext: bytes, password: str) -> str:
     return base64.b64encode(salt + iv + ct).decode("ascii")
 
 
-def build_snapshot_html(cfg: dict) -> str:
+def build_snapshot_html(cfg: dict, results=None) -> str:
     """跑一轮探测 → 加密 payload → 注入 web/index.html → 返回可部署的 HTML 字符串。"""
     password = (cfg.get("auth_password") or "").strip()
     if not password:
         raise RuntimeError("未设置 auth_password，无法加密快照；请先在 ~/.usagehub/config.json 配置访问密码")
 
-    results = [r.to_dict() for r in run_probes(build_probes(cfg, None))]
+    if results is None:
+        results = [r.to_dict() for r in run_probes(build_probes(cfg, None))]
     payload = {"results": results, "generated_at": utcnow_iso()}
     blob = _encrypt(json.dumps(payload, ensure_ascii=False).encode("utf-8"), password)
 
@@ -58,9 +59,9 @@ def build_snapshot_html(cfg: dict) -> str:
     return html.replace(marker, inject + "\n<script>\n// 快照模式", 1)
 
 
-def write_snapshot(cfg: dict, out_dir: Path) -> Path:
+def write_snapshot(cfg: dict, out_dir: Path, results=None) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
-    html = build_snapshot_html(cfg)
+    html = build_snapshot_html(cfg, results=results)
     out_file = out_dir / "index.html"
     out_file.write_text(html, encoding="utf-8")
     return out_file

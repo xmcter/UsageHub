@@ -20,6 +20,8 @@
 - **统一口径**：一律显示「已用 %」；5 小时窗显示倒计时，周/月窗显示"周几重置 / 还剩几天"。
 - **容错**：任一家取数失败不影响其他家；各家并发探测。
 - **可选：加密快照上云**：开机时把用量加密后推到任意静态站，手机随时可看；关机时显示最后一次快照（见「加密快照」）。
+- **可选：额度邮件通知**——两类：①**恢复提醒**：某家用紧了（默认 ≥80%）等它重置恢复后告知；
+  ②**别浪费提醒**：周/月额度快重置了却还剩很多没用时提醒一次（见「邮件通知」）。
 
 ## 环境要求
 
@@ -49,6 +51,7 @@ uv pip install --python .venv/bin/python -r requirements.txt
 ```
 
 macOS 想双击启动，可用 `scripts/make-app.sh` 生成一个 `UsageHub.app`（状态栏常驻，自动拉起后端）。
+该脚本会自动生成/嵌入 App 图标，需要额外 `pip install pillow`（仅打包时用，不是运行时依赖）。
 
 ## 配置
 
@@ -91,6 +94,46 @@ macOS 想双击启动，可用 `scripts/make-app.sh` 生成一个 `UsageHub.app`
 
 公网页面只含**密文**，手机端输入密码在浏览器本地解密渲染，**明文永不上云**。配合 `scripts/push-snapshot.sh` + 一个定时器即可自动刷新。
 
+## 邮件通知（可选）
+
+```bash
+.venv/bin/python -m usagehub notify            # 检查一次，该提醒就发邮件
+.venv/bin/python -m usagehub notify --dry-run  # 只检查打印，不发信、不改状态
+.venv/bin/python -m usagehub notify --test     # 发测试邮件，验证 SMTP
+```
+
+两类通知，各发一封：
+
+**① 恢复提醒**——某家额度用紧了（比如 Claude 5 小时窗打满），等它重置恢复后告知，不必自己盯面板。
+判定要求**之前确实紧张过**（已用 ≥ `alert_threshold`，默认 80%）**且现在用量真的降下来了**
+（≤ `recover_threshold`，默认 30%；或窗口滚动且降幅 >30 点）。首次运行只建基线不发信。
+
+**② 别浪费提醒**——周/月这类长周期额度，**距重置只剩 `waste_days` 天（默认 2 天）却还剩很多没用**
+（已用 ≤ `waste_threshold`，默认 80%，即还剩 20% 以上就提醒）时提醒一次，免得白白过期。
+只针对周/月窗口——5 小时窗每天滚好几轮，提醒没意义。
+**每个窗口每个周期只提醒一次**，不会在最后两天里反复发信。不想要就设 `notify.waste_reminder: false`。
+
+状态存 `~/.usagehub/notify_state.json`（含各窗口用量、重置时间、已提醒周期）。
+可在 `~/.usagehub/config.json` 的 `notify` 段调阈值：
+
+```jsonc
+"notify": {
+  "alert_threshold": 80,     // 已用多少算"紧张"
+  "recover_threshold": 30,   // 回落到多少算"恢复"
+  "waste_reminder": true,
+  "waste_days": 2,           // 距重置几天内开始提醒
+  "waste_threshold": 80      // 已用低于多少算"还剩很多"（80=剩 20% 以上就提醒）
+}
+```
+
+SMTP 配置写在 `~/.usagehub/config.json` 的 `notify.email`（`smtp_server` / `smtp_port` /
+`sender` / `password` / `receiver`）。**密码请自行填写**——不想在这里再存一份的话，
+可以让它复用同机其它工具已配好的 SMTP（`notify.email.inherit_macpush`，默认开）。
+
+配合 `usagehub snapshot` 一起跑时会**复用同一次探测**（快照 + 恢复检查一次完成），
+挂个定时器（launchd / cron）即可自动化。注意：电脑关机期间不会检查，
+但状态是持久化的——下次开机跑到时仍能识别出「这期间已恢复」并补发。
+
 ## 架构
 
 ```
@@ -100,6 +143,7 @@ usagehub/
 ├── cli.py          # 终端表格 / --json / 子命令
 ├── server.py       # stdlib http.server：面板页 + /api/usage（带缓存 + 可选 Basic Auth）
 ├── cloud.py        # 加密快照生成
+├── notify.py       # 额度恢复检测 + 邮件通知（状态存 ~/.usagehub/notify_state.json）
 ├── menu_bar.py     # macOS 状态栏 App（rumps）
 ├── web/index.html  # 单文件前端（本地实时 + 云端快照双模式）
 ├── assets/         # 状态栏图标（进度环/条）与产品 logo
