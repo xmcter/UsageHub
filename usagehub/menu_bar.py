@@ -9,6 +9,8 @@ import webbrowser
 import rumps
 from pathlib import Path
 
+from .config import load_config, save_config
+
 CONFIG_PATH = Path.home() / ".usagehub" / "config.json"
 # 环形进度模板图标：assets/ring_000..ring_100.png（每 5% 一张，单色 + 透明底）。
 # set template=True 后 macOS 自动跟随亮/暗色反白。运行时按「当前最吃紧额度的已用%」
@@ -23,6 +25,14 @@ PROVIDER_URL = {
     "grok": "https://grok.com",
     "cline": "https://app.cline.bot",
     "antigravity": "https://antigravity.google",
+}
+
+# 状态栏「设置」里每家显示的友好名（与 config.providers 的 key 一一对应）
+PROVIDER_LABELS = {
+    "claude": "Claude",
+    "cline": "ClinePass",
+    "grok": "SuperGrok",
+    "antigravity": "Antigravity",
 }
 
 def make_bar(pct, width=10):
@@ -106,6 +116,36 @@ class UsageHubApp(rumps.App):
     def on_open_web(self, sender):
         webbrowser.open(f"http://127.0.0.1:{self.port}/")
 
+    def _add_settings_menu(self):
+        """构建「设置」子菜单：每家一个勾选项，控制显示/隐藏（写 config.providers.<name>.enabled）。"""
+        settings = rumps.MenuItem("设置")
+        pcfg = load_config().get("providers", {})
+        for name in PROVIDER_LABELS:
+            item = rumps.MenuItem(
+                PROVIDER_LABELS[name], callback=self._make_toggle_cb(name))
+            item.state = 1 if pcfg.get(name, {}).get("enabled", True) else 0
+            settings.add(item)
+        self.menu.add(settings)
+
+    def _make_toggle_cb(self, provider):
+        def cb(sender):
+            self.toggle_provider(provider, sender)
+        return cb
+
+    def toggle_provider(self, provider, sender):
+        """勾/取消勾选某家订阅：改 config 后强制刷新，立即生效。"""
+        try:
+            cfg = load_config()
+            prov = cfg.setdefault("providers", {}).setdefault(provider, {})
+            new_state = not prov.get("enabled", True)
+            prov["enabled"] = new_state
+            save_config(cfg)
+            sender.state = 1 if new_state else 0
+        except Exception as e:
+            self.show_error(f"设置保存失败: {e}")
+            return
+        self.refresh_data(force=True)
+
     def _open_provider_cb(self, provider):
         """生成一个「点该产品表头 → 打开对应 App / 官网」的回调。"""
         def cb(sender):
@@ -176,6 +216,7 @@ class UsageHubApp(rumps.App):
         self.menu.add(rumps.separator)
         self.menu.add(rumps.MenuItem("刷新", callback=self.on_force_refresh))
         self.menu.add(rumps.MenuItem("打开网页面板", callback=self.on_open_web))
+        self._add_settings_menu()
         self.menu.add(rumps.MenuItem("退出", callback=self.on_exit))
 
     def update_menu_items(self, results):
@@ -243,6 +284,7 @@ class UsageHubApp(rumps.App):
         # Add actions
         self.menu.add(rumps.MenuItem("刷新", callback=self.on_force_refresh))
         self.menu.add(rumps.MenuItem("打开网页面板", callback=self.on_open_web))
+        self._add_settings_menu()
         self.menu.add(rumps.MenuItem("退出", callback=self.on_exit))
 
         # 状态栏图标 = 实时进度环（跟随最吃紧的那条额度）

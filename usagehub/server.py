@@ -21,6 +21,10 @@ _lock = threading.Lock()
 
 
 def _get_usage(cfg, force=False):
+    # 每次请求重新读盘，让状态栏「设置」里开关的 provider 立即生效（无需重启后端）。
+    # 同时 Web 面板也会自动跟随：隐藏的 provider 不再出现在结果里。
+    from .config import load_config
+    cfg = load_config()
     ttl = int(cfg.get("cache_seconds", 300))
     with _lock:
         if not force and _cache["data"] is not None and time.time() - _cache["ts"] < ttl:
