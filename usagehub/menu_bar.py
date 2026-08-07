@@ -19,12 +19,13 @@ ICON_DIR = Path(__file__).resolve().parent / "assets"
 ICON_PATH = str(ICON_DIR / "menubar_icon.png")
 
 # 点产品表头 → 打开对应 App（优先）或官网（回退）
-PROVIDER_APP = {"claude": "Claude", "antigravity": "Antigravity"}
+PROVIDER_APP = {"claude": "Claude", "antigravity": "Antigravity", "commandcode": "Command Code"}
 PROVIDER_URL = {
     "claude": "https://claude.ai",
     "grok": "https://grok.com",
     "cline": "https://app.cline.bot",
     "antigravity": "https://antigravity.google",
+    "commandcode": "https://commandcode.ai/tonycter7zwi/settings/usage",
 }
 
 # 状态栏「设置」里每家显示的友好名（与 config.providers 的 key 一一对应）
@@ -33,6 +34,7 @@ PROVIDER_LABELS = {
     "cline": "ClinePass",
     "grok": "SuperGrok",
     "antigravity": "Antigravity",
+    "commandcode": "Command Code",
 }
 
 def make_bar(pct, width=10):

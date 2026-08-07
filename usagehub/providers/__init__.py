@@ -4,12 +4,14 @@ from .claude import ClaudeProbe
 from .cline import ClineProbe
 from .grok import GrokProbe
 from .antigravity import AntigravityProbe
+from .commandcode import CommandCodeProbe
 
 ALL_PROBES = {
     "claude": ClaudeProbe,
     "cline": ClineProbe,
     "grok": GrokProbe,
     "antigravity": AntigravityProbe,
+    "commandcode": CommandCodeProbe,
 }
 
 

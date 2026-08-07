@@ -44,6 +44,11 @@ DEFAULT_CONFIG = {
             # 也可手动补：[{"email":"a@x.com","refresh_token":"...","client_id":"...","client_secret":"..."}]
             "accounts": [],
         },
+        "commandcode": {
+            "enabled": True,
+            # 留空则自动从 ~/.commandcode/auth.json 提取 apiKey
+            "api_key": "",
+        },
     },
 }
 
