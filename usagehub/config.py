@@ -49,6 +49,15 @@ DEFAULT_CONFIG = {
             # 留空则自动从 ~/.commandcode/auth.json 提取 apiKey
             "api_key": "",
         },
+        "monocloud": {
+            "enabled": True,
+            # 多套餐多账号：每个套餐一条记录。
+            # 推荐用 `usagehub auth monocloud` 浏览器登录自动写入；
+            # 也可手动填 session（浏览器登录后从 DevTools 复制的 Cookie 请求头）。
+            "accounts": [
+                # {"email": "a@example.com", "session": "monocloud_session=...; xsrf=..."}
+            ],
+        },
     },
 }
 

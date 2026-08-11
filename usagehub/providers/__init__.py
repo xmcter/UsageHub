@@ -5,6 +5,7 @@ from .cline import ClineProbe
 from .grok import GrokProbe
 from .antigravity import AntigravityProbe
 from .commandcode import CommandCodeProbe
+from .monocloud import MonoCloudProbe
 
 ALL_PROBES = {
     "claude": ClaudeProbe,
@@ -12,6 +13,7 @@ ALL_PROBES = {
     "grok": GrokProbe,
     "antigravity": AntigravityProbe,
     "commandcode": CommandCodeProbe,
+    "monocloud": MonoCloudProbe,
 }
 
 

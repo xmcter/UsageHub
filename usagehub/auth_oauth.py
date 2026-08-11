@@ -245,3 +245,139 @@ def _save_account(email, refresh_token, access_token, client_id, client_secret, 
     prov["accounts"] = accounts
     prov["enabled"] = True
     save_config(cfg)
+
+
+# ---------------------------------------------------------------------------
+# MonoCloud 面板登录（邮箱密码 → session cookie）
+# ---------------------------------------------------------------------------
+
+MONOCLOUD_LOGIN = "https://mymonocloud.com/login"
+
+
+def auth_monocloud(timeout: int = 60) -> int:
+    """交互式登录 mymonocloud.com，把 session cookie 写入 config.providers.monocloud.accounts。
+
+    不保存密码本身；只保存登录后的会话 cookie（与浏览器登录态等价）。
+    支持登录两个套餐账号：重复运行本命令即可追加第二个账号。
+    """
+    import getpass
+
+    email = input("MonoCloud 邮箱: ").strip()
+    if not email:
+        print("邮箱不能为空")
+        return 1
+    password = getpass.getpass("MonoCloud 密码（不会显示/保存）: ")
+
+    import http.cookiejar
+    import urllib.parse as urlparse
+
+    # 1. 打开登录页拿 XSRF cookie
+    jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPCookieProcessor(jar),
+        urllib.request.HTTPSHandler(),
+    )
+    try:
+        with opener.open(MONOCLOUD_LOGIN, timeout=timeout) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        print("打开登录页失败: {}".format(e))
+        return 1
+
+    xsrf = _cookie_value(jar, "XSRF-TOKEN")
+    if not xsrf:
+        print("登录页未返回 XSRF cookie，无法继续（面板可能变更）")
+        return 1
+
+    # 2. POST 登录（Inertia：X-XSRF-TOKEN header + JSON body）
+    import json as _json
+    body = _json.dumps({"email": email, "password": password}).encode("utf-8")
+    req = urllib.request.Request(
+        MONOCLOUD_LOGIN,
+        data=body,
+        method="POST",
+        headers={
+            "X-XSRF-TOKEN": urlparse.unquote(xsrf),
+            "X-Inertia": "true",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+            "User-Agent": "UsageHub/1.0",
+            "Referer": MONOCLOUD_LOGIN,
+        },
+    )
+    try:
+        with opener.open(req, timeout=timeout) as resp:
+            payload = _json.loads(resp.read().decode("utf-8", errors="replace"))
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = e.read().decode("utf-8", errors="replace")[:300]
+        except Exception:
+            pass
+        if e.code in (302, 303, 409):
+            print("登录失败（HTTP {}）: 邮箱或密码错误".format(e.code))
+        else:
+            print("登录失败 HTTP {}: {}".format(e.code, detail))
+        return 1
+    except Exception as e:
+        print("登录请求失败: {}".format(type(e).__name__, e))
+        return 1
+
+    auth = payload.get("auth") if isinstance(payload, dict) else None
+    user = (auth or {}).get("user") if isinstance(auth, dict) else None
+    if not user:
+        errs = (payload or {}).get("errors") if isinstance(payload, dict) else {}
+        if isinstance(errs, dict) and errs:
+            print("登录被拒: {}".format(_json.dumps(errs, ensure_ascii=False)))
+        else:
+            print("登录失败：未返回用户信息（面板可能要求验证码/设备验证）")
+        return 1
+
+    # 3. 组装 cookie 请求头并验证
+    cookie_str = _jar_header(jar)
+    session = cookie_str
+    if not session:
+        print("登录成功但未拿到 session cookie，无法保存")
+        return 1
+
+    account_email = (user.get("email") or user.get("name") or email).strip()
+    print("✅ 登录成功: {}".format(account_email))
+
+    # 4. 写入 config
+    _save_monocloud_account(account_email, session)
+    print("已保存到 ~/.usagehub/config.json（providers.monocloud.accounts）")
+    print("验证: .venv/bin/python -m usagehub --providers monocloud")
+    return 0
+
+
+def _save_monocloud_account(email: str, session: str) -> None:
+    cfg = load_config()
+    prov = cfg.setdefault("providers", {}).setdefault("monocloud", {})
+    accounts = list(prov.get("accounts") or [])
+    email_l = (email or "").lower()
+    entry = {"email": email or "", "session": session or ""}
+    replaced = False
+    for i, a in enumerate(accounts):
+        if not isinstance(a, dict):
+            continue
+        if email_l and (a.get("email") or "").lower() == email_l:
+            accounts[i] = {**a, **entry}
+            replaced = True
+            break
+    if not replaced:
+        accounts.append(entry)
+    prov["accounts"] = accounts
+    prov["enabled"] = True
+    save_config(cfg)
+
+
+def _cookie_value(jar: "http.cookiejar.CookieJar", name: str) -> str:
+    for c in jar:
+        if c.name == name:
+            return c.value
+    return ""
+
+
+def _jar_header(jar: "http.cookiejar.CookieJar") -> str:
+    return "; ".join("{}={}".format(c.name, c.value) for c in jar)

@@ -5,24 +5,11 @@
 自动同步：若 config 中未配置 cookie，会尝试从 Chrome 本地 Cookies 数据库解密提取。
 """
 import json
-import os
 import struct
-import sqlite3
-import subprocess
-import tempfile
-import shutil
 from datetime import datetime, timezone
-from pathlib import Path
-
-try:
-    from hashlib import pbkdf2_hmac
-    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-    from cryptography.hazmat.backends import default_backend
-    _HAS_CRYPTO = True
-except ImportError:
-    _HAS_CRYPTO = False
 
 from .base import ProviderProbe
+from .chrome_cookies import read_chrome_cookies
 from ..core import Window
 
 RATE_URL = "https://grok.com/rest/rate-limits"
@@ -109,24 +96,6 @@ BROWSER_HEADERS = {
                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"),
     "Accept": "*/*",
 }
-
-# Chrome profile directories to search (ordered by preference)
-_CHROME_BASE = Path.home() / "Library" / "Application Support" / "Google" / "Chrome"
-_CHROME_PROFILES = ["Default", "Profile 1", "Profile 2", "Profile 3"]
-
-def _chrome_safe_storage_pass():
-    """Chrome Safe Storage 密码：每台机器随机生成、存在钥匙串里，**不能硬编码**。
-    写死的话既换机即失效，也等于把本机密钥提交进仓库。取不到就返回 None。"""
-    try:
-        out = subprocess.run(
-            ["security", "find-generic-password", "-s", "Chrome Safe Storage", "-w"],
-            capture_output=True, text=True, timeout=10,
-        )
-    except Exception:
-        return None
-    if out.returncode != 0 or not out.stdout.strip():
-        return None
-    return out.stdout.strip()
 
 
 class GrokProbe(ProviderProbe):
@@ -275,110 +244,9 @@ class GrokProbe(ProviderProbe):
 
     @staticmethod
     def _auto_sync_cookie():
-        """Try to read and decrypt grok.com cookies from Chrome's local SQLite database.
-
-        Checks multiple Chrome profiles and prefers the one whose grok.com cookies
-        have the most recent last_access_utc timestamp.
-        Returns the cookie string, or None on failure.
-        """
-        if not _HAS_CRYPTO:
-            return None
-
-        safe_pass = _chrome_safe_storage_pass()
-        if not safe_pass:
-            return None
-        # Derive decryption key via PBKDF2
-        key = pbkdf2_hmac("sha1", safe_pass.encode("utf-8"), b"saltysalt", 1003, dklen=16)
-
-        best_cookie = None
-        best_ts = -1
-
-        for profile_name in _CHROME_PROFILES:
-            cookie_db = _CHROME_BASE / profile_name / "Cookies"
-            if not cookie_db.exists():
-                continue
-            try:
-                cookie_str, max_ts = _read_chrome_cookies(cookie_db, key)
-                if cookie_str and max_ts > best_ts:
-                    best_ts = max_ts
-                    best_cookie = cookie_str
-            except Exception:
-                continue
-
-        return best_cookie
-
-
-def _read_chrome_cookies(cookie_db, key):
-    """Read and decrypt grok.com cookies from a Chrome Cookies SQLite file.
-
-    Returns (cookie_string, max_last_access_utc) or (None, -1) on failure.
-    """
-    # Copy the database to a temp file to avoid locking issues with a running Chrome
-    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".db")
-    try:
-        os.close(tmp_fd)
-        shutil.copy2(str(cookie_db), tmp_path)
-
-        conn = sqlite3.connect("file:{}?mode=ro".format(tmp_path), uri=True)
-        rows = conn.execute(
-            "SELECT name, encrypted_value, last_access_utc FROM cookies "
-            "WHERE host_key LIKE '%grok.com' ORDER BY last_access_utc DESC"
-        ).fetchall()
-        conn.close()
-    except Exception:
-        return None, -1
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-
-    if not rows:
-        return None, -1
-
-    pairs = []
-    max_ts = -1
-    for name, encrypted_value, last_access in rows:
-        if last_access and last_access > max_ts:
-            max_ts = last_access
-        if not encrypted_value:
-            continue
-        try:
-            value = _decrypt_chrome_cookie(encrypted_value, key)
-            if value:
-                pairs.append("{}={}".format(name, value))
-        except Exception:
-            continue
-
-    if not pairs:
-        return None, -1
-    return "; ".join(pairs), max_ts
-
-
-def _decrypt_chrome_cookie(encrypted_value, key):
-    """Decrypt a single Chrome cookie value (macOS v10 format).
-
-    Format: 'v10' prefix (3 bytes) + AES-CBC ciphertext.
-    Key derived externally via PBKDF2. IV = 16 space bytes.
-    """
-    # Chrome macOS cookies start with b'v10' or b'v11'
-    if len(encrypted_value) <= 3:
-        return None
-    # Strip the version prefix (first 3 bytes)
-    ciphertext = encrypted_value[3:]
-    iv = b" " * 16
-    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
-    decryptor = cipher.decryptor()
-    decrypted = decryptor.update(ciphertext) + decryptor.finalize()
-    # Strip PKCS7 padding
-    if decrypted:
-        pad_len = decrypted[-1]
-        if isinstance(pad_len, int) and 1 <= pad_len <= 16:
-            decrypted = decrypted[:-pad_len]
-    # Skip first 32 bytes, decode utf-8
-    if len(decrypted) > 32:
-        return decrypted[32:].decode("utf-8", errors="replace")
-    return decrypted.decode("utf-8", errors="replace")
+        """从 Chrome 本地 Cookies 数据库读取并解密 grok.com 的 cookie 请求头。"""
+        cookie, _ = read_chrome_cookies("%grok.com")
+        return cookie
 
 
 def _first_number(d, keys):

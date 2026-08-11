@@ -12,6 +12,8 @@
 | **Cline / ClinePass** | 5 小时 / 周 / 月 | `api.cline.bot` 账户接口 |
 | **Grok / SuperGrok** | 每周 SuperGrok 限额（分产品） | `grok.com` 网页内部接口 |
 | **Antigravity**（Google） | 各模型 5 小时窗（多账号） | 本机 language server + 云端配额接口 |
+| **Command Code** | 5 小时窗 + 周窗 + 本月总量 | `api.commandcode.ai` 官方 REST API |
+| **MonoCloud**（机场面板） | 每个套餐的流量用量（多套餐） | `mymonocloud.com` 面板（需浏览器登录态） |
 
 ## 功能
 
@@ -66,7 +68,9 @@ macOS 想双击启动，可用 `scripts/make-app.sh` 生成一个 `UsageHub.app`
     "claude":  { "enabled": true, "oauth_token": "" },   // 留空则自动找本机登录态
     "cline":   { "enabled": true, "api_key": "" },
     "grok":    { "enabled": true, "cookie": "" },         // 留空则尝试从浏览器读取
-    "antigravity": { "enabled": true }
+    "antigravity": { "enabled": true },
+    "commandcode": { "enabled": true, "api_key": "" },    // 留空则自动读 ~/.commandcode/auth.json
+    "monocloud": { "enabled": true, "accounts": [] }      // 留空则自动用 Chrome 登录态
   }
 }
 ```
@@ -81,6 +85,8 @@ macOS 想双击启动，可用 `scripts/make-app.sh` 生成一个 `UsageHub.app`
 - **Grok**：用你本机浏览器登录 `grok.com` 的 Cookie 调其**网页内部接口**（非公开 API，可能随时变动或失效）。
 - **Cline**：从本机 `api.cline.bot` 的 API key 读余额/用量。
 - **Antigravity**：读本机正在运行的 language server，或用本机保存的 Google OAuth 凭据调云端配额接口。
+- **Command Code**：自动读 `~/.commandcode/auth.json`（Command Code CLI 的登录态）调官方 REST API。
+- **MonoCloud**：自动从本机 Chrome 解密 `mymonocloud.com` 的登录 Cookie（与读 grok.com 同一机制），调其面板页面接口。也可用 `usagehub auth monocloud` 手动登录写入配置。
 
 **这些都在本地完成，数据不出本机**（除非你显式启用「加密快照上云」）。读取浏览器 Cookie / 钥匙串会触发系统授权弹窗，属正常。若你不接受某家的取数方式，把它 `enabled: false` 即可。
 
@@ -149,7 +155,8 @@ usagehub/
 ├── assets/         # 状态栏图标（进度环/条）与产品 logo
 └── providers/
     ├── base.py     # ProviderProbe 基类（新增一家 = 继承它 + 注册）
-    └── claude.py / cline.py / grok.py / antigravity.py
+    ├── chrome_cookies.py  # Chrome 登录 Cookie 提取（grok / monocloud 共用）
+    └── claude.py / cline.py / grok.py / antigravity.py / commandcode.py / monocloud.py
 ```
 
 新增一家订阅：继承 `providers/base.py` 的 `ProviderProbe`，实现 `fetch()` 返回若干 `Window`，注册到 `providers/__init__.py`。

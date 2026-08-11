@@ -26,9 +26,19 @@ _PLAN_NAMES = {
     "teams-pro": "Teams Pro",
 }
 
+# 各套餐月度总 credits（美元）。API 不返回月 cap，按官方文档定价表取值：
+# https://commandcode.ai/docs/resources/usage-limits
+_PLAN_MONTHLY_CREDITS = {
+    "individual-go": 10,
+    "individual-max": 150,
+    "individual-ultra": 300,
+    "teams-pro": 40,
+}
+
 _LIMIT_LABELS = {
     "fiveHour": "5小时窗口",
     "weekly": "每周窗口",
+    "monthly": "本月总量",
 }
 
 
@@ -72,12 +82,13 @@ class CommandCodeProbe(ProviderProbe):
 
         # 2. 订阅计划名
         plan_name = "Command Code"
+        plan_id = ""
         try:
             sub = self._api(s, "{}/alpha/billing/subscriptions".format(base), headers)
             sub_data = sub.get("data") if isinstance(sub, dict) else {}
             if isinstance(sub_data, dict):
-                pid = sub_data.get("planId") or ""
-                plan_name = _PLAN_NAMES.get(pid, pid or "Command Code")
+                plan_id = sub_data.get("planId") or ""
+                plan_name = _PLAN_NAMES.get(plan_id, plan_id or "Command Code")
         except Exception:
             pass
 
@@ -109,6 +120,26 @@ class CommandCodeProbe(ProviderProbe):
                 resets_at=resets_at,
                 mergeable=False,
             ))
+
+        # 4. 月度总量：credits.monthlyCredits = 本周期累计用量；
+        #    cap 按套餐定价表取（API 不返回月 cap）。
+        credits = cred_res.get("credits") if isinstance(cred_res, dict) else {}
+        if isinstance(credits, dict):
+            monthly_used = credits.get("monthlyCredits")
+            if isinstance(monthly_used, (int, float)):
+                monthly_cap = _PLAN_MONTHLY_CREDITS.get(plan_id)
+                if monthly_cap:
+                    used_val = float(monthly_used)
+                    pct_used = min(100.0, max(0.0, (used_val / monthly_cap) * 100.0))
+                    remaining_pct = max(0.0, 100.0 - pct_used)
+                    windows.append(Window(
+                        label=_LIMIT_LABELS["monthly"],
+                        remaining_pct=remaining_pct,
+                        remaining_abs=round(monthly_cap - used_val, 2),
+                        limit_abs=monthly_cap,
+                        unit="$",
+                        mergeable=False,
+                    ))
 
         if not windows:
             return self.fail("billing/credits 里没有可识别的限额窗口: {}".format(json.dumps(cred_res)[:200]))

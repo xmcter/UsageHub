@@ -14,7 +14,7 @@ from .providers import build_probes, ALL_PROBES
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="usagehub",
-        description="统一查看 AI 订阅剩余余额（Claude / ClinePass / SuperGrok / Antigravity）",
+        description="统一查看 AI 订阅剩余余额（Claude / ClinePass / SuperGrok / Antigravity / Command Code / MonoCloud）",
     )
     parser.add_argument("--json", action="store_true", help="输出 JSON")
     parser.add_argument("--providers", help="只查这些（逗号分隔）: {}".format(",".join(ALL_PROBES)))
@@ -29,6 +29,8 @@ def main(argv=None):
     au_sub = au.add_subparsers(dest="auth_provider")
     au_ag = au_sub.add_parser("antigravity", help="浏览器 Google 登录 Antigravity 账号")
     au_ag.add_argument("--timeout", type=int, default=300, help="等待授权秒数，默认 300")
+    au_mc = au_sub.add_parser("monocloud", help="登录 monocloud.me 面板（邮箱密码→session cookie）")
+    au_mc.add_argument("--timeout", type=int, default=60, help="网络超时秒数，默认 60")
 
     sn = sub.add_parser("snapshot", help="生成端到端加密的静态快照页（可推到常开静态站）")
     sn.add_argument("--out", default=str(Path.home() / ".usagehub" / "cloud"),
@@ -57,7 +59,10 @@ def main(argv=None):
         if args.auth_provider == "antigravity":
             from .auth_oauth import auth_antigravity
             return auth_antigravity(timeout=args.timeout)
-        print("用法: usagehub auth antigravity")
+        if args.auth_provider == "monocloud":
+            from .auth_oauth import auth_monocloud
+            return auth_monocloud(timeout=args.timeout)
+        print("用法: usagehub auth antigravity | monocloud")
         return 2
 
     if args.cmd == "notify":
