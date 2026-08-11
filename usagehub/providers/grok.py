@@ -19,7 +19,7 @@ SUBS_URL = "https://grok.com/rest/subscriptions"
 CREDITS_URL = "https://grok.com/grok_api_v2.GrokBuildBilling/GetGrokCreditsConfig"
 
 # GetGrokCreditsConfig 里 product 枚举 → 展示名
-_PRODUCT_NAMES = {1: "API", 4: "聊天", 5: "Imagine"}
+_PRODUCT_NAMES = {1: "API", 2: "API", 4: "聊天", 5: "Imagine"}
 
 
 def _grpc_web_message(data):
@@ -103,50 +103,61 @@ class GrokProbe(ProviderProbe):
     display_name = "Grok"
 
     def fetch(self):
+        # 凭据发现链：grok CLI 登录态（Bearer）→ 浏览器 cookie
+        token = self._cli_access_token()
         cookie = (self.cfg.get("cookie") or "").strip()
-
-        # If no cookie configured, try auto-sync from Chrome
         if not cookie:
             cookie = self._auto_sync_cookie()
 
-        if not cookie:
+        if not token and not cookie:
             return self.fail(
-                "未配置 grok.com Cookie 且自动同步失败：浏览器登录 grok.com → DevTools → Network → 任一 /rest/ 请求 → "
-                "复制整串 Cookie 请求头，填入 ~/.usagehub/config.json 的 providers.grok.cookie"
+                "未找到 grok.com 凭据。请用 grok CLI 登录（grok 命令 → 登录），"
+                "或在 Chrome 登录 grok.com，"
+                "或把 Cookie 填入 ~/.usagehub/config.json 的 providers.grok.cookie"
             )
         s = self.session()
         headers = dict(BROWSER_HEADERS)
-        headers["Cookie"] = cookie
 
-        try:
-            windows = self._weekly_usage(s, cookie)
-        except RuntimeError as e:
-            # cookie 失效时用最新 Chrome cookie 再试一次
-            if ("401" in str(e) or "403" in str(e)):
-                fresh = self._auto_sync_cookie()
-                if fresh and fresh != cookie:
-                    cookie = fresh
-                    try:
-                        windows = self._weekly_usage(s, cookie)
-                    except Exception as e2:
-                        return self.fail("周限额查询失败: {}".format(e2))
+        windows = None
+        err = ""
+        if token:
+            try:
+                windows = self._weekly_usage(s, token=token)
+            except RuntimeError as e:
+                err = str(e)
+        if windows is None and cookie:
+            try:
+                windows = self._weekly_usage(s, cookie=cookie)
+            except RuntimeError as e:
+                # cookie 失效时用最新 Chrome cookie 再试一次
+                if ("401" in str(e) or "403" in str(e)):
+                    fresh = self._auto_sync_cookie()
+                    if fresh and fresh != cookie:
+                        try:
+                            windows = self._weekly_usage(s, cookie=fresh)
+                        except Exception as e2:
+                            err = str(e2)
+                    else:
+                        err = "cookie 失效（{}），请在 Chrome 重新登录 grok.com".format(e)
                 else:
-                    return self.fail("cookie 失效（{}），请在 Chrome 重新登录 grok.com".format(e))
-            else:
-                return self.fail("周限额查询失败: {}".format(e))
-        except Exception as e:
-            return self.fail("周限额查询失败: {}".format(e))
+                    err = str(e)
+        if windows is None:
+            return self.fail("周限额查询失败: {}".format(err or "无可用凭据"))
 
-        if not windows:
-            return self.fail("未取到周限额数据")
         account, plan = self._identity(s, headers)
         return self.result(True, windows=windows, account=account, plan=plan)
 
-    def _weekly_usage(self, s, cookie):
+    def _weekly_usage(self, s, cookie=None, token=None):
         """调 grok_api_v2.GrokBuildBilling/GetGrokCreditsConfig（gRPC-Web），
-        取「每周 SuperGrok 限额」总用量%、各产品占比与重置时间。"""
+        取「每周 SuperGrok 限额」总用量%、各产品占比与重置时间。
+
+        cookie / token 二选一：cookie 为浏览器登录态，token 为 CLI OAuth access_token。
+        """
         headers = dict(BROWSER_HEADERS)
-        headers["Cookie"] = cookie
+        if cookie:
+            headers["Cookie"] = cookie
+        if token:
+            headers["Authorization"] = "Bearer " + token
         headers["Content-Type"] = "application/grpc-web+proto"
         headers["Accept"] = "application/grpc-web+proto"
         headers["x-grpc-web"] = "1"
@@ -190,6 +201,46 @@ class GrokProbe(ProviderProbe):
         used = float(total) if total is not None else 0.0
         return [Window(label=label, remaining_pct=max(0.0, 100.0 - used),
                        resets_at=reset_iso, mergeable=False)]
+
+    @staticmethod
+    def _cli_access_token():
+        """读 grok CLI 的登录态（~/.grok/auth.json）拿 access_token。
+
+        auth.json 里 `key` 字段就是现成的 access_token（未过期时直接用）；
+        没有时才用 refresh_token 换。CLI 登录态比浏览器 cookie 稳定。
+        失败返回空串，不影响后续回退到 cookie。
+        """
+        try:
+            import json as _json
+            from pathlib import Path as _Path
+            auth_file = _Path.home() / ".grok" / "auth.json"
+            if not auth_file.exists():
+                return ""
+            data = _json.loads(auth_file.read_text(encoding="utf-8"))
+            entry = next(iter(data.values())) if isinstance(data, dict) else None
+            if not isinstance(entry, dict):
+                return ""
+            # 现成的 access_token（key 字段）
+            key = entry.get("key") or ""
+            if key:
+                return key
+            # 退路：refresh_token 交换（部分版本可能没有 key 字段）
+            refresh = entry.get("refresh_token") or ""
+            client_id = entry.get("oidc_client_id") or ""
+            issuer = entry.get("oidc_issuer") or "https://auth.x.ai"
+            if not refresh or not client_id:
+                return ""
+            import requests as _requests
+            r = _requests.post(issuer.rstrip("/") + "/oauth2/token", data={
+                "grant_type": "refresh_token",
+                "refresh_token": refresh,
+                "client_id": client_id,
+            }, timeout=20)
+            if r.status_code != 200:
+                return ""
+            return r.json().get("access_token") or ""
+        except Exception:
+            return ""
 
     @staticmethod
     def _identity(s, headers):
