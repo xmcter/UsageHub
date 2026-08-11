@@ -18,14 +18,20 @@ CONFIG_PATH = Path.home() / ".usagehub" / "config.json"
 ICON_DIR = Path(__file__).resolve().parent / "assets"
 ICON_PATH = str(ICON_DIR / "menubar_icon.png")
 
-# 点产品表头 → 打开对应 App（优先）或官网（回退）
-PROVIDER_APP = {"claude": "Claude", "antigravity": "Antigravity", "commandcode": "Command Code"}
+# 点产品表头 → 打开对应 agent 客户端（GUI App 全屏 / CLI 终端全屏），没有客户端的回退官网。
+# CLI 用绝对路径，不依赖 PATH（状态栏 App 由 launchd 拉起时 PATH 很干净）。
+_CLI = {
+    "claude": os.path.expanduser("~/.local/bin/claude"),
+    "grok": os.path.expanduser("~/.grok/bin/grok"),
+}
+_APP = {"claude": "Claude", "antigravity": "Antigravity", "commandcode": "Command Code"}
 PROVIDER_URL = {
     "claude": "https://claude.ai",
     "grok": "https://grok.com",
     "cline": "https://app.cline.bot",
     "antigravity": "https://antigravity.google",
     "commandcode": "https://commandcode.ai/tonycter7zwi/settings/usage",
+    "monocloud": "https://mymonocloud.com",
 }
 
 # 状态栏「设置」里每家显示的友好名（与 config.providers 的 key 一一对应）
@@ -155,18 +161,60 @@ class UsageHubApp(rumps.App):
         return cb
 
     def open_provider(self, provider):
-        # 优先打开本机 App，装不了/没有则回退官网
-        app = PROVIDER_APP.get(provider)
+        # 1. CLI 客户端：Terminal 全屏打开并启动（Claude Code / Grok 等）
+        cli = _CLI.get(provider)
+        if cli and os.path.exists(cli):
+            if self._open_cli_fullscreen(cli):
+                return
+        # 2. GUI App：打开并全屏（Claude / Antigravity / Command Code）
+        app = _APP.get(provider)
         if app:
             try:
                 if subprocess.run(["open", "-a", app],
                                   capture_output=True).returncode == 0:
+                    self._fullscreen_app(app)
                     return
             except Exception:
                 pass
+        # 3. 回退：官网
         url = PROVIDER_URL.get(provider)
         if url:
             webbrowser.open(url)
+
+    @staticmethod
+    def _open_cli_fullscreen(cli_path):
+        """Terminal 新窗口打开 CLI，并最大化窗口（zoomed，无需辅助功能权限）。"""
+        # 命令要带引号（路径含空格时安全）
+        cmd = "{}; exit".format(cli_path)
+        # AppleScript 字符串里嵌路径：路径含 \ 或 " 时需转义
+        esc_cmd = cmd.replace("\\", "\\\\").replace('"', '\\"')
+        script = (
+            'tell application "Terminal"\n'
+            '    activate\n'
+            '    do script "{esc_cmd}"\n'
+            '    set zoomed of front window to true\n'
+            'end tell\n'
+        ).format(esc_cmd=esc_cmd)
+        try:
+            r = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True, timeout=15)
+            return r.returncode == 0
+        except Exception:
+            return False
+
+    @staticmethod
+    def _fullscreen_app(app_name):
+        """让已激活的 App 全屏（Ctrl+Cmd+F；需要辅助功能权限，失败不影响打开）。"""
+        try:
+            subprocess.run(
+                ["osascript", "-e",
+                 'tell application "{}" to activate'.format(app_name),
+                 "-e",
+                 'tell application "System Events" to key code 3 using {control down, command down}'],
+                capture_output=True, timeout=15)
+        except Exception:
+            pass
 
     @rumps.clicked("退出")
     def on_exit(self, sender):
