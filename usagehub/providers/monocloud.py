@@ -176,6 +176,8 @@ class MonoCloudProbe(ProviderProbe):
         pack_bytes = dp.get("packAvailableBytes") if isinstance(dp.get("packAvailableBytes"), (int, float)) else None
 
         resets_at = self._iso(bw.get("resetsAt") or svc.get("expireDate"))
+        # resetsAt 是下个重置日（面板按月重置，如 08-09 → 09-09）；周期起点 = 往前推一个自然月
+        period_start = self._prev_month(resets_at) if resets_at else None
 
         if used_bytes is None and limit_bytes is None and not resets_at:
             return None
@@ -189,9 +191,12 @@ class MonoCloudProbe(ProviderProbe):
         pack_gb = to_gb(pack_bytes)
 
         remaining_pct = None
+        remaining_gb = None
         if limit_bytes is not None and limit_bytes > 0:
             used_v = used_bytes if used_bytes is not None else 0
-            remaining_pct = max(0.0, min(100.0, 100.0 * (limit_bytes - used_v) / limit_bytes))
+            remaining_bytes = limit_bytes - used_v
+            remaining_gb = to_gb(remaining_bytes)
+            remaining_pct = max(0.0, min(100.0, 100.0 * remaining_bytes / limit_bytes))
 
         label = str(name)
         if pack_gb:
@@ -200,12 +205,32 @@ class MonoCloudProbe(ProviderProbe):
         return Window(
             label=label,
             remaining_pct=remaining_pct,
-            remaining_abs=used_gb,      # 已用 GB（绝对值展示用）
+            remaining_abs=remaining_gb,  # 剩余 GB（绝对值展示用）
             limit_abs=limit_gb,          # 总量 GB
             unit="GB",
             resets_at=resets_at,
+            period_start=period_start,
             mergeable=False,
         )
+
+    @staticmethod
+    def _prev_month(iso):
+        """ISO 时间往前推一个自然月（天数按上月末收敛，如 03-31 → 02-28）。"""
+        if not iso:
+            return None
+        try:
+            from datetime import datetime
+            dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+            y, m = dt.year, dt.month
+            if m == 1:
+                y, m = y - 1, 12
+            else:
+                m -= 1
+            import calendar
+            day = min(dt.day, calendar.monthrange(y, m)[1])
+            return dt.replace(year=y, month=m, day=day).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        except Exception:
+            return None
 
     @staticmethod
     def _iso(v):

@@ -52,6 +52,20 @@ def _ms_to_iso(ms):
         return None
 
 
+def _month_start_iso():
+    """当前自然月第一天（UTC）。"""
+    now = datetime.now(timezone.utc)
+    return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _month_end_iso():
+    """当前自然月最后一天（UTC，23:59:59）。"""
+    import calendar
+    now = datetime.now(timezone.utc)
+    last_day = calendar.monthrange(now.year, now.month)[1]
+    return now.replace(day=last_day, hour=23, minute=59, second=59, microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 class CommandCodeProbe(ProviderProbe):
     name = "commandcode"
     display_name = "Command Code"
@@ -138,6 +152,8 @@ class CommandCodeProbe(ProviderProbe):
                         remaining_abs=round(monthly_cap - used_val, 2),
                         limit_abs=monthly_cap,
                         unit="$",
+                        resets_at=_month_end_iso(),
+                        period_start=_month_start_iso(),
                         mergeable=False,
                     ))
 

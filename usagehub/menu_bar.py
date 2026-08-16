@@ -12,6 +12,12 @@ from pathlib import Path
 from .config import load_config, save_config
 
 CONFIG_PATH = Path.home() / ".usagehub" / "config.json"
+
+# 本地服务请求：绕过系统/环境代理（http_proxy 可能指向已关掉的 Clash 端口，
+# 状态栏访问本机 serve 不应走代理）
+_LOCAL_SESSION = requests.Session()
+_LOCAL_SESSION.trust_env = False
+_LOCAL_SESSION.proxies = {"http": None, "https": None}
 # 环形进度模板图标：assets/ring_000..ring_100.png（每 5% 一张，单色 + 透明底）。
 # set template=True 后 macOS 自动跟随亮/暗色反白。运行时按「当前最吃紧额度的已用%」
 # 选最近一张切换，图标即成实时进度环。menubar_icon.png 是无数据时的兜底。
@@ -77,7 +83,7 @@ class UsageHubApp(rumps.App):
 
     def backend_alive(self):
         try:
-            requests.get("http://127.0.0.1:{}/".format(self.port), timeout=2)
+            _LOCAL_SESSION.get("http://127.0.0.1:{}/".format(self.port), timeout=2)
             return True
         except Exception:
             return False
@@ -238,7 +244,7 @@ class UsageHubApp(rumps.App):
             
         try:
             auth = (self.username, self.password) if self.password else None
-            resp = requests.get(url, auth=auth, timeout=15)
+            resp = _LOCAL_SESSION.get(url, auth=auth, timeout=15)
             if resp.status_code == 200:
                 data = resp.json()
                 self.update_menu_items(data.get("results", []))
@@ -252,7 +258,7 @@ class UsageHubApp(rumps.App):
             if self.ensure_backend():
                 try:
                     auth = (self.username, self.password) if self.password else None
-                    resp = requests.get(url, auth=auth, timeout=15)
+                    resp = _LOCAL_SESSION.get(url, auth=auth, timeout=15)
                     if resp.status_code == 200:
                         self.update_menu_items(resp.json().get("results", []))
                         return
@@ -308,15 +314,40 @@ class UsageHubApp(rumps.App):
                         if used_pct is not None:
                             parts.append(f"{used_pct:.0f}%")
                         iso = w.get("resets_at")
+                        days_left = None
                         if iso:
                             if is_weekly(lbl):
                                 wd = weekday_reset(iso)
                                 if wd:
                                     parts.append(wd)
+                                days_left = _days_until(iso)
                             else:
                                 cd = countdown(iso)
                                 if cd:
                                     parts.append(f"{cd}后")
+                                days_left = _days_until(iso)
+
+                        # 有总额度且还没到重置点时，展示「剩余日均」与「已用日均」对比，
+                        # 判断目前是偏快（会超）还是偏慢（富余）
+                        limit = w.get("limit_abs")
+                        rem = w.get("remaining_abs")
+                        unit = w.get("unit", "")
+                        period_start = w.get("period_start")
+                        if limit and rem is not None and days_left and days_left > 0:
+                            daily_rem = rem / days_left
+                            rem_text = _daily_text(daily_rem, unit, "剩")
+                            parts.append(rem_text)
+                            # 已用日均 = 已用量 / 已过天数（周期起点已知时）
+                            elapsed = _days_since(period_start)
+                            if elapsed and elapsed > 0:
+                                used = limit - rem
+                                if used >= 0:
+                                    daily_used = used / elapsed
+                                    used_text = _daily_text(daily_used, unit, "用")
+                                    if daily_used > daily_rem:
+                                        parts.append(f"{used_text}↑偏快")
+                                    else:
+                                        parts.append(f"{used_text}·偏慢")
                         tail = "  ·  ".join(parts)
                         short = _menu_label(lbl)
                         item_text = f"{short}   {tail}" if tail else short
@@ -438,6 +469,45 @@ def countdown(iso):
         return f"{h}h {m}m" if h else f"{m}m"
     except Exception:
         return ""
+
+
+def _days_until(iso):
+    """距重置还剩多少天（不满 24 小时按 1 天算），解析失败或已过期返回 None。"""
+    if not iso:
+        return None
+    try:
+        from datetime import datetime, timezone
+        t = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        secs = (t - datetime.now(timezone.utc)).total_seconds()
+        if secs <= 0:
+            return None
+        return max(1, int((secs + 86399) // 86400))
+    except Exception:
+        return None
+
+
+def _days_since(iso):
+    """周期起点至今过了多少天（不满 24 小时按 1 天算），解析失败返回 None。"""
+    if not iso:
+        return None
+    try:
+        from datetime import datetime, timezone
+        t = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        secs = (datetime.now(timezone.utc) - t).total_seconds()
+        if secs < 0:
+            return None
+        return max(1, int((secs + 86399) // 86400))
+    except Exception:
+        return None
+
+
+def _daily_text(amount, unit, prefix):
+    """把日均数值格式化成 "剩$6.00/天" / "用$6.00/天" / "剩5.0 GB/天" 之类。"""
+    if unit == "$":
+        return "{}{:.2f}/天".format(prefix, amount)
+    if unit:
+        return "{}{:.1f} {}/天".format(prefix, amount, unit)
+    return "{}{:.1f}/天".format(prefix, amount)
 
 def start_app():
     UsageHubApp().run()

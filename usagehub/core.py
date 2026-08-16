@@ -26,6 +26,7 @@ class Window:
     limit_abs: Optional[float] = None       # 总额度绝对值
     unit: str = ""                          # 绝对值单位，如 "$"、"次"、"credits"
     resets_at: Optional[str] = None         # ISO 时间字符串（UTC），无重置概念则为 None
+    period_start: Optional[str] = None      # ISO 时间字符串（UTC），本周期起点（推算），用于算已过时长
     mergeable: bool = True                  # 是否允许与同状态窗口合并展示（同配额池的多模型才该合）
 
 
