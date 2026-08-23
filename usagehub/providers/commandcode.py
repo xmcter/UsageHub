@@ -94,15 +94,19 @@ class CommandCodeProbe(ProviderProbe):
         except Exception:
             pass
 
-        # 2. 订阅计划名
+        # 2. 订阅计划名与周期
         plan_name = "Command Code"
         plan_id = ""
+        period_start = None
+        period_end = None
         try:
             sub = self._api(s, "{}/alpha/billing/subscriptions".format(base), headers)
             sub_data = sub.get("data") if isinstance(sub, dict) else {}
             if isinstance(sub_data, dict):
                 plan_id = sub_data.get("planId") or ""
                 plan_name = _PLAN_NAMES.get(plan_id, plan_id or "Command Code")
+                period_start = sub_data.get("currentPeriodStart")
+                period_end = sub_data.get("currentPeriodEnd")
         except Exception:
             pass
 
@@ -123,6 +127,7 @@ class CommandCodeProbe(ProviderProbe):
                 continue
             used_val = float(used)
             cap_val = float(cap)
+            rem_val = max(0.0, cap_val - used_val)
             pct_used = min(100.0, max(0.0, (used_val / cap_val) * 100.0))
             remaining_pct = max(0.0, 100.0 - pct_used)
             resets_at = _ms_to_iso(wdata.get("resetAt"))
@@ -131,31 +136,47 @@ class CommandCodeProbe(ProviderProbe):
             windows.append(Window(
                 label=label,
                 remaining_pct=remaining_pct,
+                remaining_abs=round(rem_val, 2),
+                limit_abs=cap_val,
+                unit="$",
                 resets_at=resets_at,
                 mergeable=False,
             ))
 
         # 4. 月度总量：credits.monthlyCredits = 本周期累计用量；
         #    cap 按套餐定价表取（API 不返回月 cap）。
-        credits = cred_res.get("credits") if isinstance(cred_res, dict) else {}
-        if isinstance(credits, dict):
+        credits = cred_res.get("credits") if isinstance(credits_obj := cred_res.get("credits"), dict) else {}
+        if credits:
             monthly_used = credits.get("monthlyCredits")
             if isinstance(monthly_used, (int, float)):
                 monthly_cap = _PLAN_MONTHLY_CREDITS.get(plan_id)
                 if monthly_cap:
                     used_val = float(monthly_used)
+                    rem_val = max(0.0, monthly_cap - used_val)
                     pct_used = min(100.0, max(0.0, (used_val / monthly_cap) * 100.0))
                     remaining_pct = max(0.0, 100.0 - pct_used)
                     windows.append(Window(
                         label=_LIMIT_LABELS["monthly"],
                         remaining_pct=remaining_pct,
-                        remaining_abs=round(monthly_cap - used_val, 2),
+                        remaining_abs=round(rem_val, 2),
                         limit_abs=monthly_cap,
                         unit="$",
-                        resets_at=_month_end_iso(),
-                        period_start=_month_start_iso(),
+                        resets_at=period_end or _month_end_iso(),
+                        period_start=period_start or _month_start_iso(),
                         mergeable=False,
                     ))
+
+            # 额外购买/赠送额度
+            extra = (credits.get("freeCredits") or 0) + (credits.get("purchasedCredits") or 0)
+            if isinstance(extra, (int, float)) and extra > 0:
+                windows.append(Window(
+                    label="额外额度",
+                    remaining_pct=100.0,
+                    remaining_abs=round(float(extra), 2),
+                    limit_abs=round(float(extra), 2),
+                    unit="$",
+                    mergeable=False,
+                ))
 
         if not windows:
             return self.fail("billing/credits 里没有可识别的限额窗口: {}".format(json.dumps(cred_res)[:200]))

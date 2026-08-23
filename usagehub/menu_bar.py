@@ -11,6 +11,14 @@ from pathlib import Path
 
 from .config import load_config, save_config
 
+try:
+    from PyObjCTools import AppHelper
+    def _run_on_main_thread(fn, *args, **kwargs):
+        AppHelper.callAfter(fn, *args, **kwargs)
+except Exception:
+    def _run_on_main_thread(fn, *args, **kwargs):
+        fn(*args, **kwargs)
+
 CONFIG_PATH = Path.home() / ".usagehub" / "config.json"
 
 # 本地服务请求：绕过系统/环境代理（http_proxy 可能指向已关掉的 Clash 端口，
@@ -251,11 +259,11 @@ class UsageHubApp(rumps.App):
             resp = _LOCAL_SESSION.get(url, auth=auth, timeout=30)
             if resp.status_code == 200:
                 data = resp.json()
-                self.update_menu_items(data.get("results", []))
+                _run_on_main_thread(self.update_menu_items, data.get("results", []))
             elif resp.status_code == 401:
-                self.show_error("认证失败: 请检查 config.json 账密")
+                _run_on_main_thread(self.show_error, "认证失败: 请检查 config.json 账密")
             else:
-                self.show_error(f"HTTP 错误 {resp.status_code}")
+                _run_on_main_thread(self.show_error, f"HTTP 错误 {resp.status_code}")
         except Exception as e:
             # 后端掉了（崩溃 / 被手动 kill / 睡眠唤醒后没恢复）：拉起来重试一次，
             # 而不是把「连接失败」摆在那儿等用户自己去开终端
@@ -264,11 +272,11 @@ class UsageHubApp(rumps.App):
                     auth = (self.username, self.password) if self.password else None
                     resp = _LOCAL_SESSION.get(url, auth=auth, timeout=30)
                     if resp.status_code == 200:
-                        self.update_menu_items(resp.json().get("results", []))
+                        _run_on_main_thread(self.update_menu_items, resp.json().get("results", []))
                         return
                 except Exception as e2:
                     e = e2
-            self.show_error(f"连接失败: {e}")
+            _run_on_main_thread(self.show_error, f"连接失败: {e}")
 
     def show_error(self, err_msg):
         self.menu.clear()
@@ -313,10 +321,25 @@ class UsageHubApp(rumps.App):
                         pct = w.get("remaining_pct")
                         used_pct = None if pct is None else 100.0 - pct
 
-                        # 文字精简：去掉"已用/重置:"前缀，只留百分比与重置点
                         parts = []
                         if used_pct is not None:
                             parts.append(f"{used_pct:.0f}%")
+
+                        limit = w.get("limit_abs")
+                        rem = w.get("remaining_abs")
+                        unit = w.get("unit", "")
+                        period_start = w.get("period_start")
+
+                        if rem is not None and unit and unit != "已启用":
+                            if unit == "$":
+                                parts.append(f"剩${rem:.2f}")
+                            elif unit == "GB":
+                                parts.append(f"剩{rem:.1f}GB")
+                            elif isinstance(rem, float) and rem.is_integer():
+                                parts.append(f"剩{int(rem)}{unit}")
+                            else:
+                                parts.append(f"剩{rem}{unit}")
+
                         iso = w.get("resets_at")
                         days_left = None
                         if iso:
@@ -333,10 +356,6 @@ class UsageHubApp(rumps.App):
 
                         # 有总额度且还没到重置点时，展示「剩余日均」与「已用日均」对比，
                         # 判断目前是偏快（会超）还是偏慢（富余）
-                        limit = w.get("limit_abs")
-                        rem = w.get("remaining_abs")
-                        unit = w.get("unit", "")
-                        period_start = w.get("period_start")
                         if limit and rem is not None and days_left and days_left > 0:
                             daily_rem = rem / days_left
                             rem_text = _daily_text(daily_rem, unit, "剩")

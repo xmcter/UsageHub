@@ -753,16 +753,22 @@ function render(d) {
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
 function fmtAbs(rem, limit, unit) {
-  // 展示"已用/总量"；没有总量时退回展示剩余
+  // 展示"已用 / 总量 (剩 xx)"；没有总量时展示剩余
   let range;
   if (limit) {
-    const used = Math.round((limit - rem) * 10000) / 10000;
-    range = used + ' / ' + limit;
+    const used = Math.round((limit - rem) * 100) / 100;
+    const remFmt = Math.round(rem * 100) / 100;
+    if (unit === '$') {
+      range = '$' + used.toFixed(2) + ' / $' + limit.toFixed(2) + ' (剩 $' + remFmt.toFixed(2) + ')';
+    } else if (unit === 'GB') {
+      range = used.toFixed(1) + ' / ' + limit.toFixed(1) + ' GB (剩 ' + remFmt.toFixed(1) + ' GB)';
+    } else {
+      range = used + ' / ' + limit + (unit ? ' ' + unit : '') + ' (剩 ' + remFmt + (unit ? ' ' + unit : '') + ')';
+    }
   } else {
-    range = '剩 ' + rem;
+    range = '剩 ' + (unit === '$' ? '$' + rem : rem + (unit ? ' ' + unit : ''));
   }
-  if (unit === '$') return '$' + range;
-  return range + (unit ? ' ' + unit : '');
+  return range;
 }
 
 load(false);
