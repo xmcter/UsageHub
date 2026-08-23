@@ -18,6 +18,7 @@ INDEX_HTML = Path(__file__).parent / "web" / "index.html"
 
 _cache = {"ts": 0.0, "data": None}
 _lock = threading.Lock()
+_fetch_lock = threading.Lock()
 
 
 def _get_usage(cfg, force=False):
@@ -29,13 +30,18 @@ def _get_usage(cfg, force=False):
     with _lock:
         if not force and _cache["data"] is not None and time.time() - _cache["ts"] < ttl:
             return _cache["data"]
-    results = [r.to_dict() for r in run_probes(build_probes(cfg))]
-    payload = {"results": results, "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-               "cache_seconds": ttl}
-    with _lock:
-        _cache["ts"] = time.time()
-        _cache["data"] = payload
-    return payload
+
+    with _fetch_lock:
+        with _lock:
+            if not force and _cache["data"] is not None and time.time() - _cache["ts"] < ttl:
+                return _cache["data"]
+        results = [r.to_dict() for r in run_probes(build_probes(cfg))]
+        payload = {"results": results, "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                   "cache_seconds": ttl}
+        with _lock:
+            _cache["ts"] = time.time()
+            _cache["data"] = payload
+        return payload
 
 
 def make_handler(cfg):
@@ -84,13 +90,17 @@ def make_handler(cfg):
             else:
                 self._send(404, b"not found", "text/plain")
 
+        def do_HEAD(self):
+            self.do_GET()
+
         def _send(self, code, body, ctype):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
-            self.wfile.write(body)
+            if self.command != "HEAD":
+                self.wfile.write(body)
 
         def log_message(self, fmt, *args):
             pass  # 静默访问日志

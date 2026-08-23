@@ -237,6 +237,10 @@ class UsageHubApp(rumps.App):
         rumps.quit_application()
 
     def refresh_data(self, force=False):
+        import threading
+        threading.Thread(target=self._async_refresh, args=(force,), daemon=True).start()
+
+    def _async_refresh(self, force=False):
         self.load_credentials()
         url = f"http://127.0.0.1:{self.port}/api/usage"
         if force:
@@ -244,7 +248,7 @@ class UsageHubApp(rumps.App):
             
         try:
             auth = (self.username, self.password) if self.password else None
-            resp = _LOCAL_SESSION.get(url, auth=auth, timeout=15)
+            resp = _LOCAL_SESSION.get(url, auth=auth, timeout=30)
             if resp.status_code == 200:
                 data = resp.json()
                 self.update_menu_items(data.get("results", []))
@@ -258,7 +262,7 @@ class UsageHubApp(rumps.App):
             if self.ensure_backend():
                 try:
                     auth = (self.username, self.password) if self.password else None
-                    resp = _LOCAL_SESSION.get(url, auth=auth, timeout=15)
+                    resp = _LOCAL_SESSION.get(url, auth=auth, timeout=30)
                     if resp.status_code == 200:
                         self.update_menu_items(resp.json().get("results", []))
                         return
