@@ -3,8 +3,9 @@
 
 优先级：
 1. 云端 retrieveUserQuota（多账号，无需开 IDE）
-   凭据来源：config.accounts / CodexBar tokenAccounts / 钥匙串 gemini·antigravity /
-   ~/.codexbar/antigravity/oauth_creds.json
+   凭据来源：config.accounts / CodexBar tokenAccounts /
+   ~/.codexbar/antigravity/oauth_creds.json /
+   ~/.gemini/antigravity-cli/antigravity-oauth-token / 钥匙串 gemini·antigravity
 2. 本机 language server GetUserStatus（当前登录实例，自动发现多进程）
 """
 import base64
@@ -317,7 +318,40 @@ class AntigravityProbe(ProviderProbe):
         except Exception:
             pass
 
-        # 4) macOS 钥匙串 gemini / antigravity（当前桌面端登录号）
+        # 4) Antigravity CLI oauth token
+        try:
+            cli_file = Path.home() / ".gemini" / "antigravity-cli" / "antigravity-oauth-token"
+            if cli_file.exists():
+                data = json.loads(cli_file.read_text())
+                if isinstance(data, dict):
+                    tok = data.get("token") if isinstance(data.get("token"), dict) else {}
+                    access_token = tok.get("access_token") or data.get("access_token") or ""
+                    refresh_token = tok.get("refresh_token") or data.get("refresh_token") or ""
+                    client_id = tok.get("client_id") or data.get("client_id") or ""
+                    client_secret = tok.get("client_secret") or data.get("client_secret") or ""
+                    if access_token or refresh_token:
+                        email = data.get("email") or ""
+                        if not email:
+                            idt = data.get("id_token") or ""
+                            if isinstance(idt, str) and idt.count(".") == 2:
+                                try:
+                                    pad = "=" * (-len(idt.split(".")[1]) % 4)
+                                    claims = json.loads(base64.urlsafe_b64decode(idt.split(".")[1] + pad))
+                                    email = claims.get("email") or ""
+                                except Exception:
+                                    email = ""
+                        found.append({
+                            "email": email,
+                            "access_token": access_token,
+                            "refresh_token": refresh_token,
+                            "client_id": client_id,
+                            "client_secret": client_secret,
+                            "source": "antigravity-cli",
+                        })
+        except Exception:
+            pass
+
+        # 5) macOS 钥匙串 gemini / antigravity（当前桌面端登录号）
         try:
             out = subprocess.run(
                 ["security", "find-generic-password", "-s", "gemini", "-a", "antigravity", "-w"],
