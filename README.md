@@ -11,7 +11,7 @@
 | **Claude**（Pro/Max 订阅） | 5 小时窗 + 周窗 | 官方 OAuth usage 接口，或浏览器 `claude.ai` 会话 |
 | **Cline / ClinePass** | 5 小时 / 周 / 月 | `api.cline.bot` 账户接口 |
 | **Grok / SuperGrok** | 每周 SuperGrok 限额（分产品） | `grok.com` 网页内部接口 |
-| **Antigravity**（Google） | 各模型 5 小时窗（多账号） | 本机 language server + 云端配额接口 |
+| **Antigravity**（Google） | 各模型 5 小时窗（多账号） | 本机 language server + 云端配额接口（CLI / CodexBar / 钥匙串） |
 | **Command Code** | 5 小时窗 + 周窗 + 本月总量 | `api.commandcode.ai` 官方 REST API |
 | **MonoCloud**（机场面板） | 每个套餐的流量用量（多套餐） | `mymonocloud.com` 面板（需浏览器登录态） |
 
@@ -84,7 +84,7 @@ macOS 想双击启动，可用 `scripts/make-app.sh` 生成一个 `UsageHub.app`
 - **Claude**：优先用 Claude Code 的 OAuth token（钥匙串 / `~/.claude/.credentials.json` / `claude setup-token`）；找不到时可从本机 Chrome 的 `claude.ai` 会话 Cookie 读取（需要你本机钥匙串授权）。
 - **Grok**：用你本机浏览器登录 `grok.com` 的 Cookie 调其**网页内部接口**（非公开 API，可能随时变动或失效）。
 - **Cline**：从本机 `api.cline.bot` 的 API key 读余额/用量。
-- **Antigravity**：读本机正在运行的 language server，或用本机保存的 Google OAuth 凭据调云端配额接口。
+- **Antigravity**：读本机正在运行的 language server，或用本机保存的 Google OAuth 凭据（Antigravity CLI `~/.gemini/antigravity-cli/antigravity-oauth-token` / CodexBar / 钥匙串）调云端配额接口。
 - **Command Code**：自动读 `~/.commandcode/auth.json`（Command Code CLI 的登录态）调官方 REST API。
 - **MonoCloud**：自动从本机 Chrome 解密 `mymonocloud.com` 的登录 Cookie（与读 grok.com 同一机制），调其面板页面接口。也可用 `usagehub auth monocloud` 手动登录写入配置。
 
